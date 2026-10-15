@@ -1,0 +1,454 @@
+{
+  "schema": 1,
+  "id": "forum",
+  "version": "0.1.0",
+  "title": "Synthetic scenario fixture",
+  "description": "Compact fake package for tests.",
+  "characters": {
+    "maya": {
+      "name": "Fixture character",
+      "role": "Contributor",
+      "avatar": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"1\" /></svg>"
+    },
+    "sam": {
+      "name": "Fixture character",
+      "role": "Contributor",
+      "avatar": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"1\" /></svg>"
+    },
+    "priya": {
+      "name": "Fixture character",
+      "role": "Contributor",
+      "avatar": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"1\" /></svg>"
+    },
+    "theo": {
+      "name": "Fixture character",
+      "role": "Contributor",
+      "avatar": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"1\" /></svg>"
+    },
+    "alex": {
+      "name": "Fixture character",
+      "role": "Contributor",
+      "avatar": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"1\" /></svg>"
+    }
+  },
+  "stages": [
+    {
+      "id": "launch",
+      "title": "Fixture stage",
+      "intro": "Synthetic scenario fixture.",
+      "baseline": {
+        ".gitignore": "export const b49=\"0.1.0\";",
+        "LICENSE": "export const b50=\"0.1.0\";",
+        "README.md": "export const b51=\"0.1.0\";",
+        "features/.gitkeep": "export const b52=\"0.1.0\";",
+        "package.json": "export const b53=\"0.1.0\";",
+        "src/preview.ts": "export const b54=\"0.1.0\";",
+        "src/server.ts": "export const b55=\"0.1.0\";",
+        "src/text.ts": "export const b56=\"0.1.0\";",
+        "test/api.test.ts": "export const b57=\"0.1.0\";",
+        "test/helpers.ts": "export const b58=\"0.1.0\";",
+        "web/app.js": "export const b59=\"0.1.0\";",
+        "web/index.html": "export const b60=\"0.1.0\";",
+        "web/style.css": "export const b61=\"0.1.0\";"
+      },
+      "issues": [
+        { "id": "bookmarks", "title": "Fixture issue", "body": "Fixture." },
+        { "id": "edit-comments", "title": "Fixture issue", "body": "Fixture." },
+        { "id": "pagination", "title": "Fixture issue", "body": "Fixture." },
+        { "id": "search", "title": "Fixture issue", "body": "Fixture." },
+        { "id": "voting", "title": "Fixture issue", "body": "Fixture." }
+      ],
+      "proposals": [
+        {
+          "id": "bookmarks",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "sam",
+          "issue": "bookmarks",
+          "variants": [
+            {
+              "sound": false,
+              "explanation": "Fixture assessment.",
+              "satisfiesIssue": false,
+              "concern": "Fixture concern.",
+              "files": {
+                "features/bookmarks.ts": "export const f0=\"0.1.0:bookmarks\";",
+                "test/bookmarks.test.ts": "export const f1=\"0.1.0:bookmarks\";",
+                "web/features/bookmarks.js": "export const f2=\"0.1.0:bookmarks\";"
+              },
+              "deletes": []
+            },
+            {
+              "sound": true,
+              "satisfiesIssue": true,
+              "explanation": "Fixture assessment.",
+              "reply": "Fixture reply.",
+              "files": {
+                "features/bookmarks.ts": "export const f3=\"0.1.0:bookmarks\";",
+                "test/bookmarks.test.ts": "export const f4=\"0.1.0:bookmarks\";",
+                "web/features/bookmarks.js": "export const f5=\"0.1.0:bookmarks\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "comment-edit",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "sam",
+          "issue": "edit-comments",
+          "variants": [
+            {
+              "sound": false,
+              "explanation": "Fixture assessment.",
+              "satisfiesIssue": false,
+              "concern": "Fixture concern.",
+              "files": {
+                "features/comment-edit.ts": "export const f6=\"0.1.0:comment-edit\";",
+                "test/comment-edit.test.ts": "export const f7=\"0.1.0:comment-edit\";",
+                "web/features/comment-edit.js": "export const f8=\"0.1.0:comment-edit\";"
+              },
+              "deletes": []
+            },
+            {
+              "sound": true,
+              "satisfiesIssue": true,
+              "explanation": "Fixture assessment.",
+              "reply": "Fixture reply.",
+              "files": {
+                "features/comment-edit.ts": "export const f9=\"0.1.0:comment-edit\";",
+                "test/comment-edit.test.ts": "export const f10=\"0.1.0:comment-edit\";",
+                "web/features/comment-edit.js": "export const f11=\"0.1.0:comment-edit\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "compact-previews",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "alex",
+          "variants": [
+            {
+              "sound": false,
+              "explanation": "Fixture assessment.",
+              "concern": "Fixture concern.",
+              "debt": "Fixture debt.",
+              "files": {
+                "src/preview.ts": "export const f12=\"0.1.0:compact-previews\";",
+                "test/preview.test.ts": "export const f13=\"0.1.0:compact-previews\";"
+              },
+              "deletes": []
+            },
+            {
+              "sound": true,
+              "satisfiesIssue": false,
+              "explanation": "Fixture assessment.",
+              "reply": "Fixture reply.",
+              "files": {
+                "src/preview.ts": "export const f14=\"0.1.0:compact-previews\";",
+                "test/preview.test.ts": "export const f15=\"0.1.0:compact-previews\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "empty-state",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "maya",
+          "variants": [
+            {
+              "sound": true,
+              "explanation": "Fixture assessment.",
+              "files": {
+                "features/empty-state.ts": "export const f16=\"0.1.0:empty-state\";",
+                "test/empty-state.test.ts": "export const f17=\"0.1.0:empty-state\";",
+                "web/features/empty-state.js": "export const f18=\"0.1.0:empty-state\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "pagination",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "priya",
+          "issue": "pagination",
+          "variants": [
+            {
+              "sound": false,
+              "explanation": "Fixture assessment.",
+              "satisfiesIssue": false,
+              "concern": "Fixture concern.",
+              "files": {
+                "features/pagination.ts": "export const f19=\"0.1.0:pagination\";",
+                "test/pagination.test.ts": "export const f20=\"0.1.0:pagination\";",
+                "web/features/pagination.js": "export const f21=\"0.1.0:pagination\";"
+              },
+              "deletes": []
+            },
+            {
+              "sound": true,
+              "satisfiesIssue": true,
+              "explanation": "Fixture assessment.",
+              "reply": "Fixture reply.",
+              "files": {
+                "features/pagination.ts": "export const f22=\"0.1.0:pagination\";",
+                "test/pagination.test.ts": "export const f23=\"0.1.0:pagination\";",
+                "web/features/pagination.js": "export const f24=\"0.1.0:pagination\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "rich-text",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "theo",
+          "variants": [
+            {
+              "sound": false,
+              "explanation": "Fixture assessment.",
+              "concern": "Fixture concern.",
+              "files": {
+                "features/rich-text.ts": "export const f25=\"0.1.0:rich-text\";",
+                "test/rich-text.test.ts": "export const f26=\"0.1.0:rich-text\";",
+                "web/features/rich-text.js": "export const f27=\"0.1.0:rich-text\";"
+              },
+              "deletes": []
+            },
+            {
+              "sound": true,
+              "satisfiesIssue": false,
+              "explanation": "Fixture assessment.",
+              "reply": "Fixture reply.",
+              "files": {
+                "features/rich-text.ts": "export const f28=\"0.1.0:rich-text\";",
+                "test/rich-text.test.ts": "export const f29=\"0.1.0:rich-text\";",
+                "web/features/rich-text.js": "export const f30=\"0.1.0:rich-text\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "search-regex",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "theo",
+          "issue": "search",
+          "group": "search",
+          "variants": [
+            {
+              "sound": false,
+              "explanation": "Fixture assessment.",
+              "satisfiesIssue": false,
+              "concern": "Fixture concern.",
+              "files": {
+                "features/search.ts": "export const f31=\"0.1.0:search-regex\";",
+                "test/search.test.ts": "export const f32=\"0.1.0:search-regex\";",
+                "web/features/search.js": "export const f33=\"0.1.0:search-regex\";"
+              },
+              "deletes": []
+            },
+            {
+              "sound": true,
+              "satisfiesIssue": true,
+              "explanation": "Fixture assessment.",
+              "reply": "Fixture reply.",
+              "files": {
+                "features/search.ts": "export const f34=\"0.1.0:search-regex\";",
+                "test/search.test.ts": "export const f35=\"0.1.0:search-regex\";",
+                "web/features/search.js": "export const f36=\"0.1.0:search-regex\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "search-simple",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "alex",
+          "issue": "search",
+          "group": "search",
+          "variants": [
+            {
+              "sound": true,
+              "explanation": "Fixture assessment.",
+              "satisfiesIssue": true,
+              "files": {
+                "features/search.ts": "export const f37=\"0.1.0:search-simple\";",
+                "test/search.test.ts": "export const f38=\"0.1.0:search-simple\";",
+                "web/features/search.js": "export const f39=\"0.1.0:search-simple\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "voting-framework",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "theo",
+          "issue": "voting",
+          "group": "voting",
+          "variants": [
+            {
+              "sound": false,
+              "explanation": "Fixture assessment.",
+              "satisfiesIssue": true,
+              "concern": "Fixture concern.",
+              "debt": "Unneeded voting pipeline",
+              "files": {
+                "features/voting.ts": "export const f40=\"0.1.0:voting-framework\";",
+                "test/voting.test.ts": "export const f41=\"0.1.0:voting-framework\";",
+                "web/features/voting.js": "export const f42=\"0.1.0:voting-framework\";"
+              },
+              "deletes": []
+            },
+            {
+              "sound": true,
+              "satisfiesIssue": true,
+              "explanation": "Fixture assessment.",
+              "reply": "Fixture reply.",
+              "files": {
+                "features/voting.ts": "export const f43=\"0.1.0:voting-framework\";",
+                "test/voting.test.ts": "export const f44=\"0.1.0:voting-framework\";",
+                "web/features/voting.js": "export const f45=\"0.1.0:voting-framework\";"
+              },
+              "deletes": []
+            }
+          ]
+        },
+        {
+          "id": "voting-simple",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "maya",
+          "issue": "voting",
+          "group": "voting",
+          "variants": [
+            {
+              "sound": true,
+              "explanation": "Fixture assessment.",
+              "satisfiesIssue": true,
+              "files": {
+                "features/voting.ts": "export const f46=\"0.1.0:voting-simple\";",
+                "test/voting.test.ts": "export const f47=\"0.1.0:voting-simple\";",
+                "web/features/voting.js": "export const f48=\"0.1.0:voting-simple\";"
+              },
+              "deletes": []
+            }
+          ]
+        }
+      ],
+      "endings": {
+        "success": "Complete.",
+        "incomplete": "Incomplete.",
+        "partial": "Partial."
+      },
+      "next": "growing"
+    },
+    {
+      "id": "growing",
+      "title": "Fixture stage",
+      "intro": "Synthetic scenario fixture.",
+      "baseline": {
+        ".gitignore": "export const b68=\"0.1.0\";",
+        "LICENSE": "export const b69=\"0.1.0\";",
+        "README.md": "export const b70=\"0.1.0\";",
+        "features/.gitkeep": "export const b71=\"0.1.0\";",
+        "features/bookmarks.ts": "export const b72=\"0.1.0\";",
+        "features/comment-edit.ts": "export const b73=\"0.1.0\";",
+        "features/empty-state.ts": "export const b74=\"0.1.0\";",
+        "features/pagination.ts": "export const b75=\"0.1.0\";",
+        "features/search.ts": "export const b76=\"0.1.0\";",
+        "features/voting.ts": "export const b77=\"0.1.0\";",
+        "package.json": "export const b78=\"0.1.0\";",
+        "src/preview.ts": "export const b79=\"0.1.0\";",
+        "src/server.ts": "export const b80=\"0.1.0\";",
+        "src/text.ts": "export const b81=\"0.1.0\";",
+        "test/api.test.ts": "export const b82=\"0.1.0\";",
+        "test/bookmarks.test.ts": "export const b83=\"0.1.0\";",
+        "test/comment-edit.test.ts": "export const b84=\"0.1.0\";",
+        "test/empty-state.test.ts": "export const b85=\"0.1.0\";",
+        "test/helpers.ts": "export const b86=\"0.1.0\";",
+        "test/pagination.test.ts": "export const b87=\"0.1.0\";",
+        "test/preview.test.ts": "export const b88=\"0.1.0\";",
+        "test/search.test.ts": "export const b89=\"0.1.0\";",
+        "test/voting.test.ts": "export const b90=\"0.1.0\";",
+        "web/app.js": "export const b91=\"0.1.0\";",
+        "web/features/bookmarks.js": "export const b92=\"0.1.0\";",
+        "web/features/comment-edit.js": "export const b93=\"0.1.0\";",
+        "web/features/empty-state.js": "export const b94=\"0.1.0\";",
+        "web/features/pagination.js": "export const b95=\"0.1.0\";",
+        "web/features/search.js": "export const b96=\"0.1.0\";",
+        "web/features/voting.js": "export const b97=\"0.1.0\";",
+        "web/index.html": "export const b98=\"0.1.0\";",
+        "web/style.css": "export const b99=\"0.1.0\";"
+      },
+      "issues": [
+        { "id": "notifications", "title": "Fixture issue", "body": "Fixture." }
+      ],
+      "proposals": [
+        {
+          "id": "notifications",
+          "title": "Fixture contribution",
+          "body": "Fixture contribution.",
+          "lesson": "Fixture lesson.",
+          "character": "sam",
+          "issue": "notifications",
+          "variants": [
+            {
+              "sound": false,
+              "satisfiesIssue": false,
+              "concern": "Fixture concern.",
+              "explanation": "Fixture assessment.",
+              "files": {
+                "features/notifications.ts": "export const f62=\"0.1.0:notifications\";",
+                "test/notifications.test.ts": "export const f63=\"0.1.0:notifications\";",
+                "web/features/notifications.js": "export const f64=\"0.1.0:notifications\";"
+              },
+              "deletes": []
+            },
+            {
+              "sound": true,
+              "satisfiesIssue": true,
+              "explanation": "Fixture assessment.",
+              "reply": "Fixture reply.",
+              "files": {
+                "features/notifications.ts": "export const f65=\"0.1.0:notifications\";",
+                "test/notifications.test.ts": "export const f66=\"0.1.0:notifications\";",
+                "web/features/notifications.js": "export const f67=\"0.1.0:notifications\";"
+              },
+              "deletes": []
+            }
+          ]
+        }
+      ],
+      "endings": {
+        "success": "Complete.",
+        "incomplete": "Incomplete.",
+        "partial": "Partial."
+      }
+    }
+  ],
+  "digest": "51bd26748ebce8dd59cbb4eeff3b160816ae8a6a0e1232b1d58f4f5683caf23a"
+}

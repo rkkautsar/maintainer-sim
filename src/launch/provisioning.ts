@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { Env } from "../cloudflare/env.ts";
 import { errorStatus } from "../diagnostics.ts";
 import { GitHub } from "../github.ts";
-import { findPackage, selectScenario } from "../packages.ts";
+import { selectScenario } from "../packages.ts";
+import { registry } from "../package-registry.ts";
 import { parse } from "../validation.ts";
 import type { Job, Login } from "./types.ts";
 import {
@@ -16,7 +17,10 @@ export async function provisionLaunch(
   env: Env,
   storage: DurableObjectStorage,
 ) {
-  const pack = findPackage(job.scenario, job.version),
+  const pack = await registry(env).pinned(
+      { id: job.scenario, version: job.version, digest: job.digest },
+      storage,
+    ),
     selection = selectScenario(pack),
     root = "/repos/" + login.user.login + "/" + job.name;
   if (!job.quotaGranted)

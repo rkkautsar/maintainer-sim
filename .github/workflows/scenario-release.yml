@@ -1,0 +1,85 @@
+name: Validate and release scenario
+
+on:
+  workflow_call:
+    inputs:
+      engine_ref:
+        description: Full commit SHA for the trusted maintainer-sim engine.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scenario-publish-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out trusted engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: rkkautsar/maintainer-sim
+          ref: ${{ inputs.engine_ref }}
+          path: engine
+          persist-credentials: false
+      - name: Check out scenario and all refs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: scenario
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: engine/package-lock.json
+      - run: npm ci
+        working-directory: engine
+      - name: Validate authored scenario and every captured branch
+        run: node scripts/scenario.ts validate ../scenario
+        working-directory: engine
+
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+    needs: validate
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: rkkautsar/maintainer-sim
+          ref: ${{ inputs.engine_ref }}
+          path: engine
+          persist-credentials: false
+      - name: Check out scenario tag and all refs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: scenario
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: engine/package-lock.json
+      - run: npm ci
+        working-directory: engine
+      - name: Publish immutable package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/release-scenario.ts ../scenario "$RELEASE_TAG"
+        working-directory: engine

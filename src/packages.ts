@@ -1,4 +1,4 @@
-import { publishedPackages } from "./generated/packages.ts";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Proposal, Run, Variant } from "./types.ts";
 export type Character = { name: string; role: string; avatar: string };
 export type Stage = {
@@ -21,11 +21,19 @@ export type ScenarioPackage = {
   characters: Record<string, Character>;
   stages: Stage[];
 };
+// Package context belongs to one request or background job. Pure game functions
+// remain synchronous without sharing a mutable catalogue across concurrent runs.
+export const packageScope = new AsyncLocalStorage<readonly ScenarioPackage[]>();
+function packages() {
+  const value = packageScope.getStore();
+  if (!value) throw new Error("Scenario package context has not been loaded");
+  return value;
+}
 // Keep old immutable releases available for existing runs, but offer the latest
 // version of each scenario when starting a new playthrough.
 export const catalog = (): ScenarioPackage[] => {
   const latest = new Map<string, ScenarioPackage>();
-  for (const pack of publishedPackages) {
+  for (const pack of packages()) {
     const current = latest.get(pack.id);
     if (
       !current ||
@@ -37,11 +45,8 @@ export const catalog = (): ScenarioPackage[] => {
   }
   return [...latest.values()];
 };
-export const findPackageByDigest = (digest: string) =>
-  publishedPackages.find((p) => p.digest === digest);
-
 export function findPackage(id: string, version?: string): ScenarioPackage {
-  const candidates = (version ? publishedPackages : catalog()).filter(
+  const candidates = (version ? packages() : catalog()).filter(
     (p) => p.id === id && (!version || p.version === version),
   );
   if (candidates.length !== 1)

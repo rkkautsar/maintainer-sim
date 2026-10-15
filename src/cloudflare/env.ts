@@ -1,4 +1,5 @@
 export interface Env {
+  SCENARIO_REPOSITORIES?: string;
   LAUNCHES?: DurableObjectNamespace;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;

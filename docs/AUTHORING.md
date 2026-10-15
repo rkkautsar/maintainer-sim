@@ -1,6 +1,6 @@
-# Author a scenario repository
+# Author and release a scenario
 
-A scenario is a runnable application in Git, with `__scenario__` on its default authoring branch. Authors and agents edit normal source files and Markdown. No source GitHub issues or PRs are needed. The publisher creates player content from the annotations and code branches.
+A scenario is a runnable application in a Git repository, with `__scenario__` on its default branch. Edit source files and Markdown, push the changes, and create a version tag to release. CI checks the annotations and every captured code branch on pull requests, pushes to `main`, and version tags. Publishing is handled by the trusted `maintainer-sim` workflow; the scenario repository does not need source issues or PRs. The publisher creates player content from the annotations and code branches.
 
 ```text
 __scenario__/
@@ -24,28 +24,79 @@ stage/growing/base
 
 Never create a branch named `stage/launch`: Git cannot store that ref alongside its nested names. Keep the base fixed while authoring contributions. Each initial contribution descends from its stage base; each revision descends from the previous captured revision. Normal working branches can have any other names. An agent can implement code on a working branch, commit, then capture the revision with the CLI.
 
-From the maintainer-sim checkout:
+The normal workflow is to edit these files and branches with Git, push them, and tag a release. `init`, `case`, and `capture` are optional scaffolding helpers; they are not required to author a scenario. Local validation and preview are also available from a maintainer-sim checkout:
 
 ```sh
-npm run scenario -- init /path/to/scenario
-npm run scenario -- case /path/to/scenario launch voting-simple maya voting
-npm run scenario -- capture /path/to/scenario launch voting-simple initial
 npm run scenario -- validate /path/to/scenario
 npm run scenario -- preview /path/to/scenario /tmp/forum-preview
-npm run scenario -- publish /path/to/scenario scenario-packages
-npm run bundle:packages
 ```
 
-`capture` creates a named branch at the working checkout's current HEAD. It refuses to replace existing captures. To revise a capture while drafting, move the branch explicitly using Git and validate again. Published versions are immutable: increment `version` for changes. Keep previously deployed package JSON files so active runs can resolve their pinned version.
+CI requires a tag named `v<version>` to match `scenario.yaml`. Never move or reuse a published tag. Each GitHub Release retains its package asset, so active runs can continue resolving their pinned version. Set a new `refPrefix`, such as `v0.2.0/`, for changed capture branches instead of moving published refs.
 
 The preview command exports a runnable clean baseline and a Markdown review of initial contributions. Run the exported app using its README. It does not create GitHub objects; the launch page is the end-to-end GitHub preview. Publishing validates content without executing repository scripts. Run trusted authored app tests separately, including defect witnesses and a canonical successful set of contributions.
+
+## One-time CI setup
+
+In the private scenario repository, add two small caller workflows. Replace `MAINTAINER_SIM_SHA` below with the full commit SHA of a maintainer-sim commit that contains the reusable workflow, and use that same SHA for `engine_ref`. The reusable workflow checks out the scenario repository with full history and no saved Git credentials, then runs validation from the trusted engine checkout. Validation needs only read access; the tag caller grants write access for publishing the release assets.
+
+`.github/workflows/scenario-check.yml`:
+
+```yaml
+name: Scenario validation
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    uses: rkkautsar/maintainer-sim/.github/workflows/scenario-release.yml@MAINTAINER_SIM_SHA
+    with:
+      engine_ref: MAINTAINER_SIM_SHA
+```
+
+`.github/workflows/scenario-publish.yml`:
+
+```yaml
+name: Scenario release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    uses: rkkautsar/maintainer-sim/.github/workflows/scenario-release.yml@MAINTAINER_SIM_SHA
+    with:
+      engine_ref: MAINTAINER_SIM_SHA
+```
+
+No Cloudflare or publisher secret is needed. The publish job uses the caller's short-lived GitHub Actions token to create a draft release, upload `scenario.json` and `scenario-manifest.json`, compare those assets on retry, and publish the release. The tag and assets are immutable after publication. Pin updates should be reviewed as trusted build-tool changes.
+
+Once configured, the authoring loop is:
+
+```sh
+git checkout main
+# edit __scenario__/ and code, then capture contribution branches as needed
+git add .
+git commit -m "Improve the launch scenario"
+# Push the annotation commit and every new captured branch before releasing.
+git push origin main 'refs/heads/v0.2.0/*:refs/heads/v0.2.0/*'
+# scenario.yaml already contains version: 0.2.0; wait for validation to pass.
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag workflow validates the complete repository before publishing. This trusted publishing workflow never executes scenario scripts. The scenario repository should separately run its application tests, build, and defect evidence in a job without release credentials.
 
 `scenario.yaml`:
 
 ```yaml
 schema: 1
 id: forum
-version: 0.1.0
+version: 0.2.0
+refPrefix: v0.2.0/
 title: Forum
 description: Maintain a growing community forum.
 characters:
@@ -54,6 +105,8 @@ characters:
     role: Regular contributor
 stages: [launch, growing]
 ```
+
+`refPrefix` is optional and scopes the captured Git refs. With the example above, branches use names such as `v0.2.0/stage/launch/base` and `v0.2.0/stage/launch/voting-simple/initial`. Leave it out to use the unprefixed branch names shown earlier. When you choose a prefix, use it consistently for every stage and contribution branch included in that release.
 
 Provide one simple text SVG portrait at `__scenario__/characters/<character-id>.svg`. The publisher rejects scripting, embedded images, links, event handlers, styles, entities and external references. Names/roles are plain display text. The service hosts portraits under an immutable package digest; the player sees them inside App-authored Markdown. No GitHub identity is impersonated.
 
@@ -119,7 +172,7 @@ Explain the concrete review takeaway, evidence, and consequences.
 
 The Markdown separator is a publishing boundary, not secrecy. Everything after it and all YAML assessment data stay in the server package until debrief. `__scenario__` is excluded from every exported code tree and player commit. The player repository is created from fresh application commits, never forked from the authoring repository. Keep the authoring repository private if its answers should be hidden.
 
-The v1 publisher deliberately supports regular UTF-8 files, at most 120 files / 400KB per snapshot, 100KB per file, 15 PRs per stage, 12 issues, 8 stages, and three prepared revisions. It rejects committed credentials, runtime data, binaries, symlinks and submodules. Deletions are represented explicitly; renames are delete/add. Independent contributions may not edit the same files; declared alternatives may. This gives agents actionable validation failures instead of introducing an arbitrary dependency graph.
+The v1 publisher supports regular UTF-8 files, at most 120 files / 1MB per snapshot, 250KB per file, a compact package up to 1.8MB, 15 PRs per stage, 12 issues, 8 stages, and three prepared revisions. These limits accommodate dependency lockfiles while keeping packages within Durable Object storage limits. It rejects committed credentials, runtime data, binaries, symlinks and submodules. Deletions are represented explicitly; renames are delete/add. Independent contributions may not edit the same files; declared alternatives may. This gives agents actionable validation failures instead of introducing an arbitrary dependency graph.
 
 A stage's next entry is the next item in `scenario.yaml`. After debrief the player can comment `/game next`. A new branch starts from the next authored snapshot, preserving previous history and frozen results. The same Game Master issue #1 is updated with the next brief. All pending prepared revisions and scoring stay deterministic. Jev remains an optional classifier of review text against the authored concern, with the same global budget.
 
@@ -129,6 +182,6 @@ A useful agent checklist: make the starting app genuinely usable; create changes
 
 Use blank lines between imports and declarations, between functions or object methods, and between logical blocks such as validation, database access, and assertions. Keep shared formatting consistent in the stage baseline and all contribution branches; a PR should show the feature rather than unrelated formatting churn. A formatter preserves existing spacing but does not always add these logical breaks for you.
 
-Release changed snapshots under a new scenario version. Keep prior packages in `scenario-packages` for existing runs; the launcher offers the latest release of each scenario. Preserve old branch captures in archive tags when advancing their branches, and never force-push a published capture. Forum 0.1.1 adds logical whitespace; 0.1.0 remains available for existing playthroughs.
+Release changed snapshots under a new scenario version. The launcher offers the latest release of each scenario, while prior version releases remain available to existing runs. Preserve old branch captures in archive tags when advancing their branches, and never force-push a published capture. Forum 0.1.1 adds logical whitespace; 0.1.0 remains available for existing playthroughs.
 
 Teaching prose after `<!-- debrief -->` is published in that PR’s thread when the stage ends. The game-master overview links to these comments and highlights at most three takeaways, prioritizing weaker decisions. Keep each takeaway specific and short enough to scan.

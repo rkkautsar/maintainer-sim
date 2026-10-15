@@ -5,12 +5,7 @@ import { failureCode, report } from "../diagnostics.ts";
 import { initialRun } from "../engine.ts";
 import { Game } from "../game.ts";
 import { GitHub } from "../github.ts";
-import {
-  catalog,
-  findPackage,
-  findPackageByDigest,
-  scenarioFor,
-} from "../packages.ts";
+import { registry } from "../package-registry.ts";
 import { validSignature } from "../security.ts";
 import { InvalidData, parse, positiveId } from "../validation.ts";
 import { parseWebhook, webhookEvents } from "../webhooks.ts";
@@ -81,7 +76,7 @@ export default {
         );
       if (request.method === "GET" && url.pathname === "/api/scenarios")
         return Response.json(
-          catalog().map((p) => ({
+          (await registry(env).latest()).map((p) => ({
             id: p.id,
             version: p.version,
             title: p.title,
@@ -101,7 +96,7 @@ export default {
         url.pathname,
       );
       if (request.method === "GET" && portrait) {
-        const pack = findPackageByDigest(portrait[1]),
+        const pack = await registry(env).byDigest(portrait[1]),
           image = pack?.characters[portrait[2]]?.avatar;
         return image
           ? new Response(image, {
@@ -131,7 +126,9 @@ export default {
                 "'": "&#39;",
               })[c]!,
           );
-        const p = preview ? findPackage(preview[1], preview[2]) : undefined;
+        const p = preview
+          ? await registry(env).pinned({ id: preview[1], version: preview[2] })
+          : undefined;
         const heading = p
           ? p.title + " — starting app"
           : "About Maintainer Sim";
@@ -319,7 +316,6 @@ export class GameSession extends DurableObject<Env> {
           "Repository already has a run; retry or use a fresh repository",
           { status: 409 },
         );
-      await this.ctx.storage.setAlarm(Date.now() + 100);
       const run = initialRun({
         id: randomUUID(),
         installation: input.installation,
@@ -330,10 +326,18 @@ export class GameSession extends DurableObject<Env> {
         scenario: input.scenario,
       });
       try {
-        scenarioFor(run);
+        const pack = await registry(this.env).pinned(
+          run.scenario,
+          this.ctx.storage,
+        );
+        if (!pack.stages.some((stage) => stage.id === run.scenario.stage))
+          throw new Error("Unknown stage");
       } catch {
         return new Response("Unknown scenario package", { status: 400 });
       }
+      // No external await may separate scheduling from the synchronous enqueue:
+      // a cold registry lookup can outlast the alarm and leave work stranded.
+      await this.ctx.storage.setAlarm(Date.now() + 100);
       let duplicate = false;
       this.ctx.storage.transactionSync(() => {
         if (this.store.all().some((r) => r.repository === input.repository)) {
@@ -379,15 +383,48 @@ export class GameSession extends DurableObject<Env> {
     return new Response(null, { status: 404 });
   }
   async alarm() {
+    try {
+      await this.work();
+    } catch (error) {
+      report({
+        component: "game",
+        event: "scenario_unavailable",
+        reason: failureCode(error),
+      });
+      await this.ctx.storage.setAlarm(Date.now() + 60000);
+    }
+  }
+  async work() {
     this.store.prune();
     const row = this.store.nextDelivery();
     try {
       if (row) {
         try {
-          if (row.event === "seed") {
-            const run = this.store.get(JSON.parse(row.body).id);
-            if (run.phase === "seeding") await this.game.seed(run);
-          } else await this.game.process(row.event, JSON.parse(row.body));
+          const payload: unknown = JSON.parse(row.body);
+          const repository =
+            row.event === "seed"
+              ? undefined
+              : parseWebhook(payload).repository?.id;
+          const runs =
+            row.event === "seed"
+              ? [
+                  this.store.get(
+                    parse(z.object({ id: z.string() }), payload).id,
+                  ),
+                ]
+              : repository
+                ? this.store.forRepository(repository)
+                : [];
+          await registry(this.env).scope(
+            runs.map((run) => run.scenario),
+            this.ctx.storage,
+            async () => {
+              if (row.event === "seed") {
+                const run = runs[0];
+                if (run.phase === "seeding") await this.game.seed(run);
+              } else await this.game.process(row.event, payload);
+            },
+          );
           this.store.completeDelivery(row.id);
         } catch (error) {
           this.store.failDelivery(row, error);

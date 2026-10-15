@@ -4,6 +4,10 @@ Cloudflare serves the launcher directly from `public/index.html`, `public/app.js
 
 The Worker handles the scenario catalog, portrait assets, GitHub App OAuth, and durable launch jobs. Unknown routes return 404 rather than the launcher HTML. No template repository is required. Player-owned repositories start private by default; the player can select public before creation. Personal accounts are supported first. Each authenticated account can create at most five playthroughs per UTC day.
 
+Scenario packages are read from GitHub Releases in private repositories listed by the `SCENARIO_REPOSITORIES` Worker variable, for example `rkkautsar/forum-scenario`. The Worker uses its existing GitHub App installation token to read release metadata and the `scenario.json` asset. Grant the Maintainer Sim App installation Contents read access to every configured scenario repository; authors publish releases there through the version-tag workflow in [the authoring guide](AUTHORING.md). Keep older version releases available for playthroughs already in progress. Each run's Durable Object persists its validated package by digest, so the run keeps resolving the same immutable package.
+
+Set `SCENARIO_REPOSITORIES` in `wrangler.jsonc` to the comma-separated `owner/repository` list, such as `rkkautsar/forum-scenario`. Add the scenario repository to the Maintainer Sim App installation's selected repositories. For local development, set the same variable in Wrangler's local vars or `.dev.vars` configuration. This variable names repositories to read; it contains no credential.
+
 Open [Maintainer Sim settings](https://github.com/settings/apps/maintainer-sim) to configure the existing [GitHub App](https://github.com/apps/maintainer-sim). Its [installation page](https://github.com/apps/maintainer-sim/installations/new) grants access to player repositories.
 
 Configure:
@@ -14,6 +18,7 @@ Configure:
 - Leave automatic OAuth-during-installation disabled: the launcher initiates its own state/PKCE flow.
 - Permit installation on any account if inviting other players.
 - Keep Contents, Issues and Pull requests write access, Metadata read, and the existing webhook subscriptions.
+- Grant the App installation Contents read access to `SCENARIO_REPOSITORIES` so it can discover private scenario releases and download package assets.
 - Add **Repository creation: write** if available. GitHub's create-repository API also accepts **Administration: write**, but prefer the narrower creation permission. If GitHub offers only Administration, review that broader permission before changing the registration.
 - Existing installations must approve newly requested permissions.
 
@@ -31,7 +36,7 @@ Static assets are configured in `wrangler.jsonc`. Run `npm run cf:dev` to test t
 
 ## Continuous deployment
 
-`.github/workflows/ci.yml` checks pull requests and `main` using Node 24 and `npm ci`. It runs formatting, ESLint, TypeScript, service/scenario tests, Cloudflare runtime tests, and a generated-package diff check that catches stale bundles. Only `main` can enter the production deployment job; pull requests do not receive deployment credentials. Workflow concurrency serializes main-branch runs.
+`.github/workflows/ci.yml` checks pull requests and `main` using Node 24 and `npm ci`. It runs formatting, ESLint, TypeScript, service/scenario tests, and Cloudflare runtime tests. Only `main` can enter the production deployment job; pull requests do not receive deployment credentials. Workflow concurrency serializes main-branch runs.
 
 Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in the repository’s Actions secrets. Create a dedicated deployment token using Cloudflare’s **Edit Cloudflare Workers** template, scoped to the account that owns this Worker. The workflow uses the pinned Wrangler dependency through `npm run cf:deploy`, uploading Worker code and `public/` assets together. GitHub App credentials and other runtime secrets stay configured on the Worker.
 

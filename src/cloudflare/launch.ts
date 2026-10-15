@@ -8,7 +8,7 @@ import { publicLaunch } from "../launch/presentation.ts";
 import { provisionLaunch } from "../launch/provisioning.ts";
 import { same } from "../launch/security.ts";
 import type { Job, Login } from "../launch/types.ts";
-import { catalog, findPackage } from "../packages.ts";
+import { registry } from "../package-registry.ts";
 import { parse } from "../validation.ts";
 import type { Env } from "./env.ts";
 export { launchRoute } from "../launch/routes.ts";
@@ -107,8 +107,11 @@ export class LaunchSession extends DurableObject<Env> {
             }),
             JSON.parse(raw),
           ),
-          pack = findPackage(input.scenario, input.version);
-        if (!catalog().some((p) => p.digest === pack.digest))
+          pack = (await registry(this.env).latest()).find(
+            (pack) =>
+              pack.id === input.scenario && pack.version === input.version,
+          );
+        if (!pack)
           throw new LaunchError(
             "Scenario is not available for new games.",
             400,
@@ -143,12 +146,14 @@ export class LaunchSession extends DurableObject<Env> {
           owner: login.user.id,
           scenario: pack.id,
           version: pack.version,
+          digest: pack.digest,
           name,
           private: input.private,
           state: "creating",
           attempts: 0,
           createdAt: Date.now(),
         };
+        await this.ctx.storage.put(`scenario:${pack.digest}`, pack);
         let reserved = false;
         await this.ctx.storage.transaction(async (txn) => {
           const current = await txn.get<Job>("job");

@@ -4,7 +4,7 @@ Practice maintaining a real open-source project through GitHub reviews. Follow t
 
 [Play](https://maintainer-sim.rkkautsar.workers.dev/) · [GitHub App](https://github.com/apps/maintainer-sim) · [App settings](https://github.com/settings/apps/maintainer-sim) · [Install App](https://github.com/apps/maintainer-sim/installations/new)
 
-The first scenario is **Forum**: a runnable Node.js/SQLite forum with a browser UI, five initial roadmap issues, ten launch PRs, and a second notification stage. Its [authoring repository](https://github.com/rkkautsar/forum-scenario) holds real stage and contribution branches. Player repositories contain application code; the game service keeps the rubric and prepared answers.
+The first scenario is **Forum**: a runnable Express, React, and SQLite application with five initial roadmap issues, ten launch PRs, and a second notification stage. Its [authoring repository](https://github.com/rkkautsar/forum-scenario) holds real stage and contribution branches. Player repositories contain application code; the game service keeps the rubric and prepared answers.
 
 ## Play
 
@@ -30,9 +30,9 @@ npm run test:cf
 npm run demo
 ```
 
-`npm run format` formats the repository; generated packages use the same Prettier formatter during builds. The launcher is plain HTML, JavaScript, and CSS in `public/`.
+`npm run format` formats the repository. The launcher is plain HTML, JavaScript, and CSS in `public/`.
 
-`demo` prints a deterministic Forum debrief without contacting GitHub or an AI service. `test:cf` builds the Worker and runs the Cloudflare runtime tests with mocked GitHub calls.
+`demo` reads the latest scenario release using the configured GitHub App and prints a deterministic debrief without calling an AI service. It requires local App credentials. Tests use compact synthetic scenarios and mocked GitHub calls; `test:cf` builds and exercises the actual Cloudflare runtime. Runnable application and defect evidence tests belong to the scenario repository.
 
 Copy `.env.example` to ignored `.env` for local configuration. Never commit credentials. For local Worker development:
 
@@ -50,7 +50,7 @@ See [launch configuration](docs/LAUNCH.md) for the App callback, setup URL, perm
 npm run cf:deploy
 ```
 
-GitHub Actions runs formatting, ESLint, TypeScript, service/scenario tests, Cloudflare runtime tests, and generated-package consistency checks on pull requests and pushes to `main`. ESLint rejects explicit `any` and unused declarations in source files. After those checks pass, pushes to `main` deploy the Worker and static assets, then probe the public health and asset URLs. Manual runs are available through Actions. Configure repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` first; the token should use the Edit Cloudflare Workers template scoped to your deployment account. Existing Worker secrets stay in Cloudflare. See [launch and deployment configuration](docs/LAUNCH.md).
+GitHub Actions runs formatting, ESLint, TypeScript, service/scenario tests, and Cloudflare runtime tests on pull requests and pushes to `main`. ESLint rejects explicit `any` and unused declarations in source files. After those checks pass, pushes to `main` deploy the Worker and static assets, then probe the public health and asset URLs. Manual runs are available through Actions. Configure repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` first; the token should use the Edit Cloudflare Workers template scoped to your deployment account. Existing Worker secrets stay in Cloudflare. See [launch and deployment configuration](docs/LAUNCH.md).
 
 The [code quality review](docs/CODE_REVIEW.md) describes the integrated module boundaries, typed data validation, storage policy, and deliberate tradeoffs.
 
@@ -68,7 +68,7 @@ stage/launch/comment-edit/initial
 stage/launch/comment-edit/rev-1
 ```
 
-The authoring CLI validates branch diffs and annotations, previews content, exports clean application code, and publishes immutable packages. The service resolves runs by scenario ID, version, stage, and digest. Retain released package versions while their playthroughs exist.
+The authoring CLI validates branch diffs and annotations, previews content, and exports clean application code. A pinned Git tag publishes the validated package as a GitHub Release asset in the scenario repository. The Worker reads releases from configured private scenario repositories using its GitHub App installation access, caches packages by digest, and resolves each run by scenario ID, version, stage, and digest. Keep prior releases available while their playthroughs exist. See [the authoring guide](docs/AUTHORING.md) and [release registry setup](docs/LAUNCH.md).
 
 ```bash
 npm run scenario -- validate /path/to/scenario
@@ -76,7 +76,7 @@ npm run scenario -- preview /path/to/scenario
 npm run scenario -- export /path/to/scenario /tmp/playthrough
 ```
 
-Run `npm run scenario` for all commands and arguments. The Worker build bundles the published files in `scenario-packages/`.
+Run `npm run scenario` for all local authoring commands and arguments. The Worker discovers package assets from GitHub Releases at runtime.
 
 ## Scoring and AI
 

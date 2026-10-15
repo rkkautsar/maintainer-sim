@@ -31,8 +31,6 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run test:cf
-      - name: Check generated packages are up to date
-        run: git diff --exit-code -- src/generated/packages.ts
 
   deploy:
     needs: check
@@ -64,5 +62,6 @@ jobs:
       - name: Verify public deployment
         run: |
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://maintainer-sim.rkkautsar.workers.dev/health
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://maintainer-sim.rkkautsar.workers.dev/api/scenarios
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://maintainer-sim.rkkautsar.workers.dev/app.js > /dev/null
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://maintainer-sim.rkkautsar.workers.dev/style.css > /dev/null

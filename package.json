@@ -9,7 +9,7 @@
   "scripts": {
     "test": "node --test test/*.test.ts",
     "check": "tsc --noEmit",
-    "demo": "node src/cli.ts demo",
+    "demo": "node --env-file-if-exists=.env src/cli.ts demo",
     "start": "node --env-file-if-exists=.env src/cli.ts serve",
     "cli": "node --env-file-if-exists=.env src/cli.ts",
     "cf:dev": "wrangler dev",
@@ -18,7 +18,6 @@
     "cf:cli": "node --env-file-if-exists=.env src/cloudflare-cli.ts",
     "test:cf": "npm run cf:check && node --test test/cloudflare/*.test.ts",
     "scenario": "node scripts/scenario.ts",
-    "bundle:packages": "node scripts/bundle-packages.ts",
     "judge:calibrate": "node scripts/calibrate-judge.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "format": "prettier --write .",

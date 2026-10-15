@@ -36,6 +36,7 @@ const scenarioSchema = z
     description: z.string(),
     characters: z.record(z.string(), characterSchema),
     stages: z.array(z.string()),
+    refPrefix: z.string().optional(),
   })
   .strict();
 const stageSchema = z
@@ -108,9 +109,23 @@ function commit(repo: string, ref: string) {
     /^[A-Za-z0-9][A-Za-z0-9/._-]*$/.test(ref) && !ref.includes(".."),
     "Invalid ref",
   );
-  const sha = git(repo, "rev-parse", "--verify", ref + "^{commit}")
-    .toString()
-    .trim();
+  let sha: string;
+  try {
+    sha = git(repo, "rev-parse", "--verify", `refs/heads/${ref}^{commit}`)
+      .toString()
+      .trim();
+  } catch {
+    // CI checks out one branch, while fetch-depth: 0 retains other captures as
+    // remote-tracking refs. Resolve those without accepting ambiguous tags.
+    sha = git(
+      repo,
+      "rev-parse",
+      "--verify",
+      `refs/remotes/origin/${ref}^{commit}`,
+    )
+      .toString()
+      .trim();
+  }
   need(/^[0-9a-f]{40,64}$/.test(sha), "Invalid commit");
   return sha;
 }
@@ -144,8 +159,8 @@ export function snapshot(repo: string, sha: string): Record<string, string> {
     const raw = git(repo, "cat-file", "blob", blob);
     total += raw.length;
     need(
-      raw.length <= 100000 &&
-        total <= 400000 &&
+      raw.length <= 250000 &&
+        total <= 1000000 &&
         Object.keys(files).length < 120,
       "Scenario code exceeds publish limits",
     );
@@ -199,7 +214,16 @@ export function publishScenario(repoInput: string): ScenarioPackage {
     );
   allowedKeys(
     config,
-    ["schema", "id", "version", "title", "description", "characters", "stages"],
+    [
+      "schema",
+      "id",
+      "version",
+      "title",
+      "description",
+      "characters",
+      "stages",
+      "refPrefix",
+    ],
     "scenario",
   );
   need(
@@ -207,6 +231,11 @@ export function publishScenario(repoInput: string): ScenarioPackage {
     "Invalid scenario schema/id",
   );
   need(/^\d+\.\d+\.\d+$/.test(config.version), "Version must be x.y.z");
+  const refPrefix = config.refPrefix ?? "";
+  need(
+    !refPrefix || /^(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)+$/.test(refPrefix),
+    "Invalid refPrefix",
+  );
   text(config.title, "title", 100);
   text(config.description, "description", 1000);
   need(
@@ -259,7 +288,7 @@ export function publishScenario(repoInput: string): ScenarioPackage {
       Object.keys(stageMeta.endings).length === 3,
       "All three endings required",
     );
-    const baseSha = commit(repo, `stage/${stageId}/base`),
+    const baseSha = commit(repo, `${refPrefix}stage/${stageId}/base`),
       baseline = snapshot(repo, baseSha);
     const issues = docs(join(dir, "issues")).map((file) => {
       const { meta, body } = markdown(
@@ -323,7 +352,7 @@ export function publishScenario(repoInput: string): ScenarioPackage {
       let previous = baseSha;
       for (let n = 0; n <= prMeta.revisions; n++) {
         const label = n ? "rev-" + n : "initial",
-          ref = `stage/${stageId}/${prMeta.id}/${label}`,
+          ref = `${refPrefix}stage/${stageId}/${prMeta.id}/${label}`,
           sha = commit(repo, ref);
         git(repo, "merge-base", "--is-ancestor", previous, sha);
         const facts = annotation(

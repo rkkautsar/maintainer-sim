@@ -7,7 +7,9 @@ import {
   findPackage,
   scenarioFor,
   selectScenario,
+  packageScope,
 } from "./packages.ts";
+import { localRegistry } from "./local-packages.ts";
 import { server } from "./server.ts";
 import { Store } from "./store.ts";
 const [cmd, ...args] = process.argv.slice(2);
@@ -40,14 +42,25 @@ function demo() {
   console.log(debrief(run));
 }
 async function main() {
+  const source = localRegistry();
+  const latest = await source.latest();
+  packageScope.enterWith(latest);
   if (cmd === "demo") {
     demo();
     return;
   }
-  const store = new Store(process.env.DATABASE_PATH),
-    game = new Game(store, (run) =>
-      GitHub.installation(run.installation, run.repository),
-    );
+  const store = new Store(process.env.DATABASE_PATH);
+  const pinned = await Promise.all(
+    store.all().map((run) => source.pinned(run.scenario)),
+  );
+  packageScope.enterWith([
+    ...new Map(
+      [...latest, ...pinned].map((pack) => [pack.digest, pack]),
+    ).values(),
+  ]);
+  const game = new Game(store, (run) =>
+    GitHub.installation(run.installation, run.repository),
+  );
   if (cmd === "serve") {
     // Resume interrupted publication without depending on another webhook.
     for (const r of store.all())

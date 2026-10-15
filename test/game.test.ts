@@ -1,3 +1,4 @@
+import "./fixtures/packages.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findPackage, selectScenario } from "../src/packages.ts";
@@ -186,7 +187,7 @@ test("seeding resumes with exact object counts and no duplicate creation", async
     assert.equal(fake.milestones.length, 1);
     assert.equal(fake.issues.length, 6);
     assert.equal(r.master, 1);
-    assert.match(fake.issues[0].body, /group chat/);
+    assert.match(fake.issues[0].body, /Synthetic scenario fixture/);
     assert.match(fake.issues[0].body, /Contributions/);
     assert.equal(fake.prs.length, 10);
     assert.equal(s.get("run").phase, "active");
@@ -649,7 +650,7 @@ test("published forum runs resolve their own content and advance idempotently", 
     { s, fake, game, r } = await setup(selectScenario(pack));
   try {
     assert.equal(Object.keys(r.prs).length, 10);
-    assert.ok(fake.issues[0].body.includes("group chat"));
+    assert.ok(fake.issues[0].body.includes("Synthetic scenario fixture"));
     assert.ok(fake.prs.some((p) => p.body.includes("/portraits/")));
     await game.process("issue_comment", payload(r, "/game finish"));
     assert.equal(s.get(r.id).result?.maximum, 20);

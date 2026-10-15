@@ -6,7 +6,7 @@ import {
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
-import { stringify } from "yaml";
+import { parse, stringify } from "yaml";
 const [command, repoInput = ".", ...args] = process.argv.slice(2),
   repo = resolve(repoInput);
 try {
@@ -44,14 +44,17 @@ try {
       !/^(initial|rev-[1-3])$/.test(revision)
     )
       throw Error("capture REPO STAGE CASE [initial|rev-N]");
-    execFileSync(
-      "git",
-      ["-C", repo, "branch", `stage/${stage}/${id}/${revision}`, "HEAD"],
-      { stdio: "inherit" },
-    );
-    console.log(
-      "Captured current HEAD; branches are resolved to immutable commits at publish.",
-    );
+    const config = parse(
+      readFileSync(join(repo, "__scenario__", "scenario.yaml"), "utf8"),
+    ) as { refPrefix?: string };
+    const refPrefix = config.refPrefix ?? "";
+    if (refPrefix && !/^(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)+$/.test(refPrefix))
+      throw Error("Invalid refPrefix in scenario.yaml");
+    const ref = `${refPrefix}stage/${stage}/${id}/${revision}`;
+    execFileSync("git", ["-C", repo, "branch", ref, "HEAD"], {
+      stdio: "inherit",
+    });
+    console.log(`Captured ${ref} at current HEAD.`);
   } else if (command === "init") {
     const root = join(repo, "__scenario__");
     if (existsSync(root)) throw Error("__scenario__ already exists");
@@ -82,7 +85,7 @@ try {
   ) {
     const pack = publishScenario(repo);
     if (command === "publish")
-      console.log(savePackage(pack, args[0] ?? "scenario-packages"));
+      console.log(savePackage(pack, args[0] ?? "var/scenario-packages"));
     else if (command === "export")
       exportBaseline(
         pack,

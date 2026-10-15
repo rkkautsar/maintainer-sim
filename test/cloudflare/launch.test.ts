@@ -1,3 +1,4 @@
+import { packages } from "../fixtures/packages.ts";
 import { findPackage } from "../../src/packages.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -80,6 +81,41 @@ function fixture(
         token: "fixture-installation-token",
         expires_at: new Date(Date.now() + 3600000).toISOString(),
       });
+    if (path === "/repos/rkkautsar/forum-scenario/installation")
+      return response({ id: 171562073 });
+    if (
+      path === "/app/installations/171562073/access_tokens" &&
+      method === "POST"
+    )
+      return response({ token: "fixture-registry-token" });
+    if (path === "/repos/rkkautsar/forum-scenario/releases" && method === "GET")
+      return response([
+        {
+          tag_name: "v0.1.1",
+          body: `Scenario SHA-256: ${packages[1].digest}`,
+          draft: false,
+          prerelease: false,
+          assets: [{ id: 101, name: "scenario.json", size: 1000 }],
+        },
+        {
+          tag_name: "v0.1.0",
+          body: `Scenario SHA-256: ${packages[0].digest}`,
+          draft: false,
+          prerelease: false,
+          assets: [{ id: 100, name: "scenario.json", size: 1000 }],
+        },
+      ]);
+    const asset =
+      /^\/repos\/rkkautsar\/forum-scenario\/releases\/assets\/(100|101)$/.exec(
+        path,
+      );
+    if (asset && method === "GET")
+      return new Response(
+        JSON.stringify(packages[asset[1] === "100" ? 0 : 1]),
+        {
+          headers: { "content-type": "application/octet-stream" },
+        },
+      ) as any;
     if (path === "/user/repos" && method === "POST") {
       createCalls++;
       if (options.createStatus)
@@ -223,6 +259,7 @@ function fixture(
       WEBHOOK_SECRET: "secret",
       GITHUB_APP_ID: "123",
       GITHUB_PRIVATE_KEY: key,
+      SCENARIO_REPOSITORIES: "rkkautsar/forum-scenario",
       GITHUB_CLIENT_ID: "fixture-client",
       GITHUB_CLIENT_SECRET: "fixture-client-secret",
       PUBLIC_ORIGIN: "https://app",
@@ -404,7 +441,7 @@ test("launch creates one clean player repository and seeds ten package-selected 
     assert.equal(fixtureState.createCalls(), 1);
     assert.equal(prs.length, 10);
     assert.equal(issues[0].number, 1);
-    assert.match(issues[0].body, /group chat/);
+    assert.match(issues[0].body, /Synthetic scenario fixture/);
     assert.ok(prs.some((p) => p.body.includes("/portraits/")));
     const status = (await (
       await mf.dispatchFetch("https://app/admin/status?installation=1", {

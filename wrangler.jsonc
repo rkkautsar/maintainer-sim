@@ -39,6 +39,7 @@
     "binding": "AI",
   },
   "vars": {
+    "SCENARIO_REPOSITORIES": "rkkautsar/forum-scenario",
     "JUDGE_ENABLED": "true",
     "REVIEW_COACHING_ENABLED": "true",
     "COACH_CONFIDENCE_THRESHOLD": "0.3",
@@ -48,9 +49,6 @@
     "GITHUB_CLIENT_ID": "Iv23liIU7hVd8ynBoZN4",
     "GITHUB_APP_SLUG": "maintainer-sim",
     "PUBLIC_ORIGIN": "https://maintainer-sim.rkkautsar.workers.dev",
-  },
-  "build": {
-    "command": "node scripts/bundle-packages.ts",
   },
   "observability": {
     "enabled": true,

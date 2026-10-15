@@ -1,4 +1,5 @@
-import { findPackage, selectScenario } from "./packages.ts";
+import { selectScenario } from "./packages.ts";
+import { localRegistry } from "./local-packages.ts";
 const [command, ...args] = process.argv.slice(2);
 const url = process.env.WORKER_URL,
   token = process.env.ADMIN_TOKEN;
@@ -24,7 +25,10 @@ if (command === "seed") {
     owner,
     repo,
     player: Number(player),
-    scenario: selectScenario(findPackage(scenario, version), stage),
+    scenario: selectScenario(
+      await localRegistry().pinned({ id: scenario, version }),
+      stage,
+    ),
     confirmDisposable: process.env.DISPOSABLE_REPO_CONFIRMED === "true",
   };
 } else if (command === "status") {

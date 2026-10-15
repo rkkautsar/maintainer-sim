@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getPlatformProxy } from "wrangler";
 import { CloudJudge, unwrapJudgeResponse } from "../src/cloudflare/judge.ts";
-import { findPackage } from "../src/packages.ts";
+import { localRegistry } from "../src/local-packages.ts";
 import type { Env } from "../src/cloudflare/env.ts";
 // Live, opt-in operator experiment. Uses the production classifier and request format.
 // A separate in-memory budget limits this experiment; deployed settings are never changed.
@@ -24,7 +24,7 @@ const fixtures = fixturePaths.flatMap((path) =>
   JSON.parse(readFileSync(path, "utf8")),
 );
 const coaching = process.env.CALIBRATE_COACHING === "true";
-const pack = findPackage("forum", "0.1.0");
+const pack = await localRegistry().pinned({ id: "forum", version: "0.1.0" });
 const charges = new Map<
   string,
   { cost: number; result?: string; finalized?: boolean }

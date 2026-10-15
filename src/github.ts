@@ -26,6 +26,14 @@ export class GitHub {
     app: string,
     key: string,
   ) {
+    const api = this.app(app, key).api;
+    const { data } = await api.apps.createInstallationAccessToken({
+      installation_id: id,
+      repository_ids: [repository],
+    });
+    return new GitHub(data.token);
+  }
+  static app(app: string, key: string) {
     const now = Math.floor(Date.now() / 1000),
       encode = (v: unknown) =>
         Buffer.from(JSON.stringify(v)).toString("base64url");
@@ -37,12 +45,7 @@ export class GitHub {
       .update(body)
       .sign(key)
       .toString("base64url");
-    const api = new Octokit({ auth: body + "." + signature });
-    const { data } = await api.apps.createInstallationAccessToken({
-      installation_id: id,
-      repository_ids: [repository],
-    });
-    return new GitHub(data.token);
+    return new GitHub(body + "." + signature);
   }
   async get(path: string) {
     return (await this.api.request("GET " + path)).data as unknown;
