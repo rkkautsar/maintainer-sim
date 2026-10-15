@@ -1,5 +1,5 @@
 import { publishedPackages } from "./generated/packages.ts";
-import type { Run, Proposal, Variant } from "./types.ts";
+import type { Proposal, Run, Variant } from "./types.ts";
 export type Character = { name: string; role: string; avatar: string };
 export type Stage = {
   id: string;

@@ -1,17 +1,78 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
+  existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   writeFileSync,
-  mkdirSync,
-  existsSync,
 } from "node:fs";
-import { resolve, join, dirname } from "node:path";
-import { createHash } from "node:crypto";
+import { dirname, join, resolve } from "node:path";
 import { parseDocument } from "yaml";
+import { z } from "zod";
 import type { ScenarioPackage, Stage } from "./packages.ts";
-import type { Variant, Proposal } from "./types.ts";
+import type { Proposal, Variant } from "./types.ts";
+import { parse as parseBoundary } from "./validation.ts";
+/** These strict schemas validate without transforms or defaults. Preserve the
+ * original key order: released package digests include the serialized metadata. */
+function annotation<T>(schema: z.ZodType<T>, value: unknown): T {
+  parseBoundary(schema, value);
+  return value as T;
+}
 const idPattern = /^[a-z][a-z0-9-]{0,47}$/;
+const characterSchema = z
+  .object({
+    name: z.string(),
+    role: z.string(),
+    avatar: z.string().optional(),
+  })
+  .strict();
+const scenarioSchema = z
+  .object({
+    schema: z.number(),
+    id: z.string(),
+    version: z.string(),
+    title: z.string(),
+    description: z.string(),
+    characters: z.record(z.string(), characterSchema),
+    stages: z.array(z.string()),
+  })
+  .strict();
+const stageSchema = z
+  .object({
+    title: z.string(),
+    endings: z
+      .object({
+        success: z.string(),
+        incomplete: z.string(),
+        partial: z.string(),
+      })
+      .strict(),
+  })
+  .strict();
+const issueSchema = z.object({ id: z.string(), title: z.string() }).strict();
+const assessmentFactsSchema = z
+  .object({
+    sound: z.boolean(),
+    satisfiesIssue: z.boolean().optional(),
+    concern: z.string().optional(),
+    debt: z.string().optional(),
+    explanation: z.string(),
+    reply: z.string().optional(),
+  })
+  .strict();
+const prSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    character: z.string(),
+    issue: z.string().optional(),
+    group: z.string().optional(),
+    revisions: z.number(),
+    assessment: z.record(z.string(), assessmentFactsSchema),
+    followup: z.string().optional(),
+  })
+  .strict();
 function need(ok: unknown, message: string): asserts ok {
   if (!ok) throw new Error(message);
 }
@@ -24,16 +85,17 @@ function text(v: unknown, name: string, max = 16000): asserts v is string {
     "Invalid " + name,
   );
 }
-function yaml(source: string): any {
+function yaml(source: string): unknown {
   need(Buffer.byteLength(source) <= 32000, "Annotation exceeds 32KB");
   const doc = parseDocument(source, { uniqueKeys: true });
   need(!doc.errors.length, "Invalid YAML: " + doc.errors[0]?.message);
-  return doc.toJS({ maxAliasCount: 0 });
+  return doc.toJS({ maxAliasCount: 0 }) as unknown;
 }
 export function markdown(source: string) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(source);
   need(match, "Markdown needs YAML frontmatter");
-  return { meta: yaml(match[1]), body: match[2].trim() };
+  const meta = annotation(z.record(z.string(), z.unknown()), yaml(match[1]));
+  return { meta, body: match[2].trim() };
 }
 function git(repo: string, ...args: string[]) {
   return execFileSync("git", ["-C", repo, ...args], {
@@ -114,7 +176,11 @@ function change(base: Record<string, string>, next: Record<string, string>) {
     deletes: Object.keys(base).filter((p) => !(p in next)),
   };
 }
-function allowedKeys(value: any, keys: string[], where: string) {
+function allowedKeys(
+  value: unknown,
+  keys: string[],
+  where: string,
+): asserts value is Record<string, unknown> {
   need(
     value && typeof value === "object" && !Array.isArray(value),
     "Invalid " + where,
@@ -127,7 +193,10 @@ function allowedKeys(value: any, keys: string[], where: string) {
 export function publishScenario(repoInput: string): ScenarioPackage {
   const repo = resolve(repoInput),
     root = join(repo, "__scenario__"),
-    config = yaml(readFileSync(join(root, "scenario.yaml"), "utf8"));
+    config = annotation(
+      scenarioSchema,
+      yaml(readFileSync(join(root, "scenario.yaml"), "utf8")),
+    );
   allowedKeys(
     config,
     ["schema", "id", "version", "title", "description", "characters", "stages"],
@@ -150,7 +219,7 @@ export function publishScenario(repoInput: string): ScenarioPackage {
   const characters: ScenarioPackage["characters"] = {};
   for (const [id, raw] of Object.entries(config.characters ?? {})) {
     need(idPattern.test(id), "Invalid character ID");
-    const c = raw as any;
+    const c = annotation(characterSchema, raw);
     allowedKeys(c, ["name", "role", "avatar"], "character");
     text(c.name, "character name", 60);
     text(c.role, "character role", 100);
@@ -174,19 +243,20 @@ export function publishScenario(repoInput: string): ScenarioPackage {
   for (const stageId of config.stages) {
     need(idPattern.test(stageId), "Invalid stage ID");
     const dir = join(root, "stages", stageId),
-      doc = markdown(readFileSync(join(dir, "stage.md"), "utf8"));
-    allowedKeys(doc.meta, ["title", "endings"], "stage");
-    text(doc.meta.title, "stage title", 150);
+      doc = markdown(readFileSync(join(dir, "stage.md"), "utf8")),
+      stageMeta = annotation(stageSchema, doc.meta);
+    allowedKeys(stageMeta, ["title", "endings"], "stage");
+    text(stageMeta.title, "stage title", 150);
     text(doc.body, "stage brief");
     allowedKeys(
-      doc.meta.endings,
+      stageMeta.endings,
       ["success", "incomplete", "partial"],
       "endings",
     );
-    for (const value of Object.values(doc.meta.endings))
+    for (const value of Object.values(stageMeta.endings))
       text(value, "stage ending");
     need(
-      Object.keys(doc.meta.endings).length === 3,
+      Object.keys(stageMeta.endings).length === 3,
       "All three endings required",
     );
     const baseSha = commit(repo, `stage/${stageId}/base`),
@@ -195,11 +265,12 @@ export function publishScenario(repoInput: string): ScenarioPackage {
       const { meta, body } = markdown(
         readFileSync(join(dir, "issues", file), "utf8"),
       );
-      allowedKeys(meta, ["id", "title"], "issue");
-      need(idPattern.test(meta.id), "Invalid issue ID");
-      text(meta.title, "issue title", 150);
+      const issueMeta = annotation(issueSchema, meta);
+      allowedKeys(issueMeta, ["id", "title"], "issue");
+      need(idPattern.test(issueMeta.id), "Invalid issue ID");
+      text(issueMeta.title, "issue title", 150);
       text(body, "issue body");
-      return { id: meta.id, title: meta.title, body };
+      return { id: issueMeta.id, title: issueMeta.title, body };
     });
     need(
       issues.length > 0 &&
@@ -211,8 +282,9 @@ export function publishScenario(repoInput: string): ScenarioPackage {
       const { meta, body } = markdown(
         readFileSync(join(dir, "prs", file), "utf8"),
       );
+      const prMeta = annotation(prSchema, meta);
       allowedKeys(
-        meta,
+        prMeta,
         [
           "id",
           "title",
@@ -225,18 +297,18 @@ export function publishScenario(repoInput: string): ScenarioPackage {
         ],
         "PR",
       );
-      need(idPattern.test(meta.id), "Invalid PR ID");
-      text(meta.title, "PR title", 150);
-      need(characters[meta.character], "Unknown character");
+      need(idPattern.test(prMeta.id), "Invalid PR ID");
+      text(prMeta.title, "PR title", 150);
+      need(characters[prMeta.character], "Unknown character");
       need(
-        !meta.issue || issues.some((i) => i.id === meta.issue),
+        !prMeta.issue || issues.some((i) => i.id === prMeta.issue),
         "Unknown issue",
       );
-      need(!meta.group || idPattern.test(meta.group), "Invalid group");
+      need(!prMeta.group || idPattern.test(prMeta.group), "Invalid group");
       need(
-        Number.isInteger(meta.revisions) &&
-          meta.revisions >= 0 &&
-          meta.revisions <= 3,
+        Number.isInteger(prMeta.revisions) &&
+          prMeta.revisions >= 0 &&
+          prMeta.revisions <= 3,
         "revisions must be 0..3",
       );
       const parts = body.split("<!-- debrief -->");
@@ -244,17 +316,20 @@ export function publishScenario(repoInput: string): ScenarioPackage {
       text(parts[0], "PR description");
       text(parts[1], "PR debrief");
       need(
-        meta.assessment && typeof meta.assessment === "object",
+        prMeta.assessment && typeof prMeta.assessment === "object",
         "Missing assessment",
       );
       const variants: Variant[] = [];
       let previous = baseSha;
-      for (let n = 0; n <= meta.revisions; n++) {
+      for (let n = 0; n <= prMeta.revisions; n++) {
         const label = n ? "rev-" + n : "initial",
-          ref = `stage/${stageId}/${meta.id}/${label}`,
+          ref = `stage/${stageId}/${prMeta.id}/${label}`,
           sha = commit(repo, ref);
         git(repo, "merge-base", "--is-ancestor", previous, sha);
-        const facts = meta.assessment[label];
+        const facts = annotation(
+          assessmentFactsSchema,
+          prMeta.assessment[label],
+        );
         allowedKeys(
           facts,
           [
@@ -290,18 +365,18 @@ export function publishScenario(repoInput: string): ScenarioPackage {
         previous = sha;
       }
       need(
-        Object.keys(meta.assessment).length === variants.length,
+        Object.keys(prMeta.assessment).length === variants.length,
         "Unexpected/missing assessment revision",
       );
       return {
-        id: meta.id,
-        title: meta.title,
+        id: prMeta.id,
+        title: prMeta.title,
         body: parts[0].trim(),
         lesson: parts[1].trim(),
-        character: meta.character,
-        issue: meta.issue,
-        group: meta.group,
-        followup: meta.followup,
+        character: prMeta.character,
+        issue: prMeta.issue,
+        group: prMeta.group,
+        followup: prMeta.followup,
         variants,
       };
     });
@@ -357,12 +432,12 @@ export function publishScenario(repoInput: string): ScenarioPackage {
     }
     const stage = {
       id: stageId,
-      title: doc.meta.title,
+      title: stageMeta.title,
       intro: doc.body,
       baseline,
       issues,
       proposals,
-      endings: doc.meta.endings,
+      endings: stageMeta.endings,
     };
     stages.push(stage);
   }

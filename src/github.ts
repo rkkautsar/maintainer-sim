@@ -1,10 +1,17 @@
 import { Octokit } from "@octokit/rest";
 import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
+import * as schemas from "./github-schemas.ts";
+import { parse } from "./validation.ts";
 export class GitHub {
   api: Octokit;
+  requestCount = 0;
   constructor(token: string) {
     this.api = new Octokit({ auth: token, request: { timeout: 15000 } });
+    this.api.hook.wrap("request", async (request, options) => {
+      this.requestCount++;
+      return request(options);
+    });
   }
   static async installation(id: number, repository: number) {
     const app = process.env.GITHUB_APP_ID,
@@ -38,26 +45,81 @@ export class GitHub {
     return new GitHub(data.token);
   }
   async get(path: string) {
-    return (await this.api.request("GET " + path)).data as any;
+    return (await this.api.request("GET " + path)).data as unknown;
   }
-  async post(path: string, body: any) {
-    return (await this.api.request("POST " + path, body)).data as any;
+  async post(path: string, body: Record<string, unknown>) {
+    return (await this.api.request("POST " + path, body)).data as unknown;
   }
-  async patch(path: string, body: any) {
-    return (await this.api.request("PATCH " + path, body)).data as any;
+  async patch(path: string, body: Record<string, unknown>) {
+    return (await this.api.request("PATCH " + path, body)).data as unknown;
   }
   async list(path: string) {
-    return (await this.api.paginate("GET " + path, { per_page: 100 })) as any[];
+    return (await this.api.paginate("GET " + path, {
+      per_page: 100,
+    })) as unknown[];
+  }
+  async repository(root: string) {
+    return parse(schemas.repositorySchema, await this.get(root));
+  }
+  async reference(root: string, branch: string) {
+    return parse(
+      schemas.referenceSchema,
+      await this.get(root + "/git/ref/heads/" + branch),
+    );
+  }
+  async pull(root: string, number: number) {
+    return parse(schemas.pullSchema, await this.get(root + "/pulls/" + number));
+  }
+  async listIssues(root: string) {
+    return (await this.list(root + "/issues?state=all")).map((x) =>
+      parse(schemas.numberedSchema, x),
+    );
+  }
+  async listMilestones(root: string) {
+    return (await this.list(root + "/milestones?state=all")).map((x) =>
+      parse(schemas.numberedSchema, x),
+    );
+  }
+  async listPulls(root: string) {
+    return (await this.list(root + "/pulls?state=all")).map((x) =>
+      parse(schemas.numberedSchema, x),
+    );
+  }
+  async listComments(path: string) {
+    return (await this.list(path)).map((x) => parse(schemas.commentSchema, x));
+  }
+  async listReviews(root: string, number: number) {
+    return (await this.list(root + "/pulls/" + number + "/reviews")).map((x) =>
+      parse(schemas.reviewSchema, x),
+    );
+  }
+  async createNumbered(path: string, body: Record<string, unknown>) {
+    return parse(schemas.numberedSchema, await this.post(path, body));
+  }
+  async createComment(path: string, body: string) {
+    return parse(schemas.commentSchema, await this.post(path, { body }));
+  }
+  async readCommit(root: string, sha: string) {
+    return parse(
+      schemas.commitSchema,
+      await this.get(root + "/git/commits/" + sha),
+    );
   }
   async tree(root: string, sha: string) {
-    const data = await this.get(root + "/git/trees/" + sha + "?recursive=1");
+    const data = parse(
+      schemas.treeSchema,
+      await this.get(root + "/git/trees/" + sha + "?recursive=1"),
+    );
     if (data.truncated) throw new Error("Unsupported truncated tree");
     const files: Record<string, string> = {};
-    for (const entry of data.tree) {
+    for (const entry of data.tree ?? []) {
       if (entry.type === "tree") continue;
       if (entry.type !== "blob" || entry.mode !== "100644")
         throw new Error("Unsupported file type");
-      const blob = await this.get(root + "/git/blobs/" + entry.sha);
+      const blob = parse(
+        schemas.blobSchema,
+        await this.get(root + "/git/blobs/" + entry.sha),
+      );
       if (blob.size > 100000) throw new Error("Oversized file");
       files[entry.path] = Buffer.from(blob.content, "base64").toString("utf8");
     }
@@ -68,19 +130,25 @@ export class GitHub {
     files: Record<string, string>,
     message: string,
   ) {
-    const tree = await this.post(root + "/git/trees", {
-      tree: Object.entries(files).map(([path, content]) => ({
-        path,
-        mode: "100644",
-        type: "blob",
-        content,
-      })),
-    });
-    return this.post(root + "/git/commits", {
-      message,
-      tree: tree.sha,
-      parents: [],
-    });
+    const tree = parse(
+      schemas.shaSchema,
+      await this.post(root + "/git/trees", {
+        tree: Object.entries(files).map(([path, content]) => ({
+          path,
+          mode: "100644",
+          type: "blob",
+          content,
+        })),
+      }),
+    );
+    return parse(
+      schemas.shaSchema,
+      await this.post(root + "/git/commits", {
+        message,
+        tree: tree.sha,
+        parents: [],
+      }),
+    );
   }
   async commit(
     root: string,
@@ -89,28 +157,34 @@ export class GitHub {
     message: string,
     deletes: string[] = [],
   ) {
-    const base = await this.get(root + "/git/commits/" + parent);
-    const tree = await this.post(root + "/git/trees", {
-      base_tree: base.tree.sha,
-      tree: [
-        ...Object.entries(files).map(([path, content]) => ({
-          path,
-          mode: "100644",
-          type: "blob",
-          content,
-        })),
-        ...deletes.map((path) => ({
-          path,
-          mode: "100644",
-          type: "blob",
-          sha: null,
-        })),
-      ],
-    });
-    return await this.post(root + "/git/commits", {
-      message,
-      tree: tree.sha,
-      parents: [parent],
-    });
+    const base = await this.readCommit(root, parent);
+    const tree = parse(
+      schemas.shaSchema,
+      await this.post(root + "/git/trees", {
+        base_tree: base.tree.sha,
+        tree: [
+          ...Object.entries(files).map(([path, content]) => ({
+            path,
+            mode: "100644",
+            type: "blob",
+            content,
+          })),
+          ...deletes.map((path) => ({
+            path,
+            mode: "100644",
+            type: "blob",
+            sha: null,
+          })),
+        ],
+      }),
+    );
+    return parse(
+      schemas.shaSchema,
+      await this.post(root + "/git/commits", {
+        message,
+        tree: tree.sha,
+        parents: [parent],
+      }),
+    );
   }
 }

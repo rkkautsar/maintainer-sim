@@ -1,15 +1,19 @@
-import type { Run, Finding, ReviewCoaching } from "./types.ts";
+import type { Finding, ReviewCoaching, Run } from "./types.ts";
+export type RevisionIntent = {
+  run: string;
+  id: string;
+  old: string;
+  head: string;
+  revision: number;
+};
 export interface Persistence {
-  db: {
-    prepare(sql: string): {
-      run(...args: any[]): any;
-      get(...args: any[]): any;
-      all(...args: any[]): any[];
-    };
-  };
   save(run: Run): void;
   get(id: string): Run;
   all(): Run[];
+  forRepository(repository: number): Run[];
+  recordRevision(intent: RevisionIntent): void;
+  revisionIntents(run: string): RevisionIntent[];
+  clearRevision(run: string, id: string): void;
 }
 export interface Reviewer {
   coach?(

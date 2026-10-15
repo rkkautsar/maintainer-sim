@@ -13,7 +13,6 @@ const pack = findPackage("forum", "0.1.0");
 const { baseline, proposals } = pack.stages[0];
 import { Store } from "../src/store.ts";
 import { validSignature, command } from "../src/security.ts";
-import { Judge } from "../src/judge.ts";
 export function fixture() {
   const r = initialRun({
     id: "run",
@@ -137,105 +136,6 @@ test("SQLite deduplicates delivery IDs and persists runs", () => {
     s.close();
   }
 });
-test("budget reservation refuses overspend and duplicates", () => {
-  const s = new Store(":memory:");
-  try {
-    assert.equal(s.reserve("one", 0.6, 1, "day"), true);
-    assert.equal(s.reserve("two", 0.6, 1, "day"), false);
-    assert.equal(s.reserve("one", 0.1, 1, "day"), false);
-    assert.equal(s.reserve("three", 0.4, 1, "day"), true);
-    assert.equal(s.reserve("four", 0.1, 1, "tomorrow"), true);
-  } finally {
-    s.close();
-  }
-});
-test("judge disabled incurs no calls", async () => {
-  const prev = process.env.JEV_CALIBRATED;
-  delete process.env.JEV_CALIBRATED;
-  const s = new Store(":memory:");
-  try {
-    const j = new Judge(s, async () => {
-      throw new Error("must not call");
-    });
-    assert.equal(await j.evaluate("review", "concern", {}), undefined);
-  } finally {
-    s.close();
-    if (prev !== undefined) process.env.JEV_CALIBRATED = prev;
-  }
-});
-test("judge caches validated assessment; low confidence falls back", async () => {
-  const vars = [
-    "JEV_CALIBRATED",
-    "JEV_API_KEY",
-    "JEV_INPUT_USD_PER_MILLION",
-    "JEV_CONFIDENCE_THRESHOLD",
-    "AI_DAILY_BUDGET_USD",
-  ];
-  const before = Object.fromEntries(vars.map((k) => [k, process.env[k]]));
-  Object.assign(process.env, {
-    JEV_CALIBRATED: "true",
-    JEV_API_KEY: "test",
-    JEV_INPUT_USD_PER_MILLION: "0.042",
-    JEV_CONFIDENCE_THRESHOLD: "0.9",
-    AI_DAILY_BUDGET_USD: "1",
-  });
-  const s = new Store(":memory:");
-  let calls = 0;
-  try {
-    const j = new Judge(s, async () => {
-      calls++;
-      return new Response(
-        JSON.stringify({
-          answers: {
-            identification: {
-              type: "choice",
-              choice: "identified",
-              confidence: 1,
-              probabilities: {
-                absent: 0,
-                vague: 0,
-                identified: 1,
-                consequence: 0,
-              },
-            },
-          },
-        }),
-      );
-    });
-    assert.equal(
-      await j.evaluate("ownership missing", "owner check", {}),
-      "identified",
-    );
-    assert.equal(
-      await j.evaluate("ownership missing", "owner check", {}),
-      "identified",
-    );
-    assert.equal(calls, 1);
-    const uncertain = new Judge(
-      s,
-      async () =>
-        new Response(
-          JSON.stringify({
-            answers: {
-              identification: {
-                type: "choice",
-                choice: "identified",
-                confidence: 0.2,
-              },
-            },
-          }),
-        ),
-    );
-    assert.equal(await uncertain.evaluate("other", "concern", {}), undefined);
-  } finally {
-    s.close();
-    for (const k of vars) {
-      if (before[k] === undefined) delete process.env[k];
-      else process.env[k] = before[k];
-    }
-  }
-});
-
 test("overengineered implementation delivers the feature but incurs maintainability penalty", () => {
   const r = fixture();
   r.prs["voting-framework"].outcome = "merged";

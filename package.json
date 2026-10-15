@@ -20,19 +20,23 @@
     "scenario": "node scripts/scenario.ts",
     "bundle:packages": "node scripts/bundle-packages.ts",
     "judge:calibrate": "node scripts/calibrate-judge.ts",
+    "lint": "eslint \"src/**/*.ts\"",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
     "@octokit/rest": "^22.0.0",
-    "yaml": "2.8.3"
+    "yaml": "2.8.3",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261014.1",
     "@types/node": "^24.0.0",
+    "eslint": "^10.12.0",
     "miniflare": "^4.20260730.0",
     "prettier": "^3.9.10",
     "typescript": "^5.9.0",
+    "typescript-eslint": "^8.71.2",
     "wrangler": "^4.151.0"
   },
   "overrides": {

@@ -1,17 +1,9 @@
 import { createServer } from "node:http";
+import { failureCode, report } from "./diagnostics.ts";
+import { Game } from "./game.ts";
 import { validSignature } from "./security.ts";
 import { Store } from "./store.ts";
-import { Game } from "./game.ts";
-const allowed = new Set([
-  "installation",
-  "installation_repositories",
-  "pull_request",
-  "pull_request_review",
-  "pull_request_review_comment",
-  "issue_comment",
-  "issues",
-  "push",
-]);
+import { parseWebhook, webhookEvents } from "./webhooks.ts";
 export function server(store: Store, game: Game, secret: string) {
   if (!secret) throw new Error("WEBHOOK_SECRET is required");
   let working = false;
@@ -19,29 +11,19 @@ export function server(store: Store, game: Game, secret: string) {
     if (working) return;
     working = true;
     try {
-      const row = store.db
-        .prepare(
-          "SELECT * FROM deliveries WHERE status='pending' AND next<=? ORDER BY rowid LIMIT 1",
-        )
-        .get(Date.now()) as any;
+      const row = store.nextDelivery();
       if (!row) return;
       try {
         await game.process(row.event, JSON.parse(row.body));
-        store.db
-          .prepare("UPDATE deliveries SET status='done' WHERE id=?")
-          .run(row.id);
-      } catch {
-        const attempts = row.attempts + 1;
-        store.db
-          .prepare(
-            "UPDATE deliveries SET attempts=?,next=?,status=? WHERE id=?",
-          )
-          .run(
-            attempts,
-            Date.now() + Math.min(60000, 1000 * 2 ** attempts),
-            attempts >= 5 ? "failed" : "pending",
-            row.id,
-          );
+        store.completeDelivery(row.id);
+      } catch (error) {
+        store.failDelivery(row, error);
+        report({
+          component: "game",
+          event: "delivery_failed",
+          reason: failureCode(error),
+          delivery: row.id,
+        });
       }
     } finally {
       working = false;
@@ -50,6 +32,7 @@ export function server(store: Store, game: Game, secret: string) {
   const timer = setInterval(() => void work(), 500);
   // Periodic reconciliation recovers missed webhooks; synthetic IDs are stable per minute.
   const reconcile = setInterval(() => {
+    store.prune();
     for (const r of store.all())
       if (["active", "finishing"].includes(r.phase))
         store.enqueue(
@@ -108,8 +91,10 @@ export function server(store: Store, game: Game, secret: string) {
         res.end();
         return;
       }
-      JSON.parse(raw.toString("utf8"));
-      if (allowed.has(event)) store.enqueue(id, event, raw.toString("utf8"));
+      if (webhookEvents.has(event)) {
+        const payload = parseWebhook(JSON.parse(raw.toString("utf8")));
+        store.enqueue(id, event, JSON.stringify(payload));
+      }
       res.writeHead(202);
       res.end();
     } catch {

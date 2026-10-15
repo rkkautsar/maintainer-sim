@@ -9,7 +9,13 @@ import { Game } from "../src/game.ts";
 import { server } from "../src/server.ts";
 test("HTTP endpoint rejects unsigned data, accepts signed duplicates once", async () => {
   const s = new Store(":memory:"),
-    http = server(s, new Game(s), "secret");
+    http = server(
+      s,
+      new Game(s, async () => {
+        throw Error("Unexpected external request");
+      }),
+      "secret",
+    );
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
   const address = http.address() as { port: number },
     url = "http://127.0.0.1:" + address.port + "/webhooks",

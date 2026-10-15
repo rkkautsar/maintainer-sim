@@ -6,9 +6,12 @@ import { Store } from "../src/store.ts";
 const pack = findPackage("forum", "0.1.0");
 const { baseline, proposals } = pack.stages[0];
 import { expectedFiles, initialRun } from "../src/engine.ts";
-import type { GitHub } from "../src/github.ts";
+import { GitHub } from "../src/github.ts";
 import type { Run } from "../src/types.ts";
-class Fake {
+class Fake extends GitHub {
+  constructor() {
+    super("fixture");
+  }
   files: Record<string, Record<string, string>> = { baseline: { ...baseline } };
   refs: Record<string, string> = { main: "baseline" };
   prs: any[] = [];
@@ -19,7 +22,8 @@ class Fake {
   failRevision = false;
   reviews: any[] = [];
   async get(path: string): Promise<any> {
-    if (path === "/repos/owner/game") return { id: 2, default_branch: "main" };
+    if (path === "/repos/owner/game")
+      return { id: 2, default_branch: "main", owner: { id: 3 } };
     if (path.includes("/git/ref/heads/")) {
       const ref = path.split("/git/ref/heads/")[1];
       if (!this.refs[ref])
@@ -170,7 +174,7 @@ function payload(r: Run, body?: string, user = 3) {
     repository: { id: 2 },
     action: "created",
     issue: { number: r.master },
-    comment: { body, user: { id: user } },
+    ...(body !== undefined ? { comment: { body, user: { id: user } } } : {}),
   };
 }
 test("seeding resumes with exact object counts and no duplicate creation", async () => {
@@ -825,6 +829,61 @@ test("feedback stays hidden during play and publishing resumes after a lost PR-c
         overview.body.includes(`/pull/${number}#issuecomment-${detail.id}`),
       );
     }
+  } finally {
+    s.close();
+  }
+});
+
+test("review events refresh only the target review list and retain other evidence", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    const reviewPaths: string[] = [];
+    const list = fake.list.bind(fake);
+    fake.list = async (path) => {
+      if (path.endsWith("/reviews")) reviewPaths.push(path);
+      return list(path);
+    };
+    r.prs["voting-simple"].reviews = [
+      {
+        id: 99,
+        body: "Previous evidence",
+        state: "COMMENTED",
+        commit: r.prs["voting-simple"].head,
+        submitted: "2026-10-15T00:00:00Z",
+      },
+    ];
+    s.save(r);
+    await game.process("pull_request_review", {
+      ...payload(r),
+      pull_request: { number: r.prs["comment-edit"].number },
+    });
+    assert.deepEqual(reviewPaths, [
+      `/repos/owner/game/pulls/${r.prs["comment-edit"].number}/reviews`,
+    ]);
+    assert.equal(
+      s.get(r.id).prs["voting-simple"].reviews[0].body,
+      "Previous evidence",
+    );
+  } finally {
+    s.close();
+  }
+});
+
+test("bot and unrelated issue comments do not trigger GitHub reconciliation", async () => {
+  const { s, game, r } = await setup();
+  try {
+    game.connect = async () => {
+      throw Error("Should not contact GitHub for unrelated comments");
+    };
+    await game.process(
+      "issue_comment",
+      payload(r, "Automated contributor update", 99),
+    );
+    await game.process("issue_comment", {
+      ...payload(r, "/game finish"),
+      issue: { number: r.prs["comment-edit"].number },
+    });
+    assert.equal(s.get(r.id).phase, "active");
   } finally {
     s.close();
   }

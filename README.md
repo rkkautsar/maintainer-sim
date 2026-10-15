@@ -40,7 +40,7 @@ Copy `.env.example` to ignored `.env` for local configuration. Never commit cred
 npm run cf:dev
 ```
 
-The Node webhook service is also available with `npm start`; the player launch page runs in the Worker. The Worker serves the launcher, OAuth callbacks, public catalog, contributor portraits, signed webhooks, and protected operator endpoints. Durable Objects persist sessions, launch jobs, game state, webhook retries, and the shared AI budget.
+The Node webhook service is also available with `npm start`; it processes outcomes deterministically and leaves review text unassessed. Use `npm run cf:dev` for local development on the same Cloudflare AI path used in production. The Worker serves the launcher, OAuth callbacks, public catalog, contributor portraits, signed webhooks, and protected operator endpoints. Durable Objects persist sessions, launch jobs, game state, webhook retries, and the shared AI budget. Completed delivery deduplication records and AI cache/billing rows are retained for 30 days; pending and failed deliveries and revision intents are preserved, and historical runs remain available for stage history and `/game next`.
 
 ## GitHub App and deployment
 
@@ -50,13 +50,13 @@ See [launch configuration](docs/LAUNCH.md) for the App callback, setup URL, perm
 npm run cf:deploy
 ```
 
-GitHub Actions runs formatting, TypeScript, service/scenario tests, and Cloudflare runtime tests on pull requests and pushes to `main`. After those checks pass, pushes to `main` deploy the Worker and static assets, then probe the public health and asset URLs. Manual runs are available through Actions. Configure repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` first; the token should use the Edit Cloudflare Workers template scoped to your deployment account. Existing Worker secrets stay in Cloudflare. See [launch and deployment configuration](docs/LAUNCH.md).
+GitHub Actions runs formatting, ESLint, TypeScript, service/scenario tests, Cloudflare runtime tests, and generated-package consistency checks on pull requests and pushes to `main`. ESLint rejects explicit `any` and unused declarations in source files. After those checks pass, pushes to `main` deploy the Worker and static assets, then probe the public health and asset URLs. Manual runs are available through Actions. Configure repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` first; the token should use the Edit Cloudflare Workers template scoped to your deployment account. Existing Worker secrets stay in Cloudflare. See [launch and deployment configuration](docs/LAUNCH.md).
 
-The current [code quality review](docs/CODE_REVIEW.md) records remaining prototype shortcuts and the recommended cleanup order.
+The [code quality review](docs/CODE_REVIEW.md) describes the integrated module boundaries, typed data validation, storage policy, and deliberate tradeoffs.
 
 Contents, Issues, and Pull requests need write access; Metadata needs read access. The launcher also needs repository-creation permission through user authorization. Installation and repository-access events handle access changes; installing the App alone does not create a game.
 
-Webhook payloads require a valid signature. Commands and review credit are restricted to the designated player. Tokens stay on the server, and player repository code is never executed in the game service. OAuth uses expiring one-use state, PKCE, a secure session cookie, and CSRF protection. New games are limited to five per authenticated account per UTC day. Repository creation and seeding are durable and retryable.
+Webhook payloads require a valid signature. Commands and review credit are restricted to the designated player. Tokens stay on the server, and player repository code is never executed in the game service. GitHub, webhook, AI, and persisted-run data are parsed through Zod boundaries before use. Run records use a `schemaVersion: 1` envelope; existing bare run records are migrated on read. OAuth uses expiring one-use state, PKCE, a secure session cookie, and CSRF protection. New games are limited to five per authenticated account per UTC day. Repository creation and seeding are durable and retryable.
 
 ## Author scenarios
 
@@ -82,7 +82,7 @@ Run `npm run scenario` for all commands and arguments. The Worker build bundles 
 
 Roadmap progress and merge/close outcomes use the authored rubric. The debrief explains accepted defects, maintenance debt, and missed requirements. Review effort is informational. Without a calibrated judge, review wording is explicitly unassessed; requesting a revision alone does not earn concern-identification credit.
 
-The deployed trial uses **Cloudflare Clef-flash** to match review text to curated concerns. Read [judge configuration and calibration](docs/JUDGE.md) for the measured results and limitations. A matching request-changes review can trigger its prepared revision; `/game revise <PR-number>` remains available when matching abstains.
+The Cloudflare Worker can use **Cloudflare Clef-flash** to match review text to curated concerns. The Node webhook mode stays deterministic; use `npm run cf:dev` to try the production AI integration locally. Read [judge configuration and calibration](docs/JUDGE.md) for the measured results and limitations. A matching request-changes review can trigger its prepared revision; `/game revise <PR-number>` remains available when matching abstains.
 
 The game-master issue ends with a short score overview, up to three takeaways, and a linked decision table. Each PR receives its own debrief after the stage ends: the outcome, explanation, teaching takeaway, and any review coaching. Publishing retries reuse comments, so interrupted delivery does not duplicate feedback.
 
@@ -99,10 +99,12 @@ npm run cf:cli -- status INSTALLATION_ID
 npm run cf:cli -- retry INSTALLATION_ID
 ```
 
+The authenticated `GET /admin/diagnostics?installation=...` endpoint reports safe failure categories for an installation. Structured logs include GitHub request counts without raw webhook bodies or credentials.
+
 For manual troubleshooting, export the selected stage into a fresh disposable repository first, then seed with an explicit package:
 
 ```bash
 DISPOSABLE_REPO_CONFIRMED=true npm run cf:cli -- seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_ID forum 0.1.1 launch
 ```
 
-The local CLI provides equivalent `seed`, `status`, and `retry-deliveries` commands. `resume RUN_ID` retries interrupted local seeding or result publication.
+The local CLI provides equivalent `seed`, `status`, and `retry-deliveries` commands. `resume RUN_ID` retries interrupted local seeding or result publication. Authored game work is split across `src/game/` modules for reconciliation, reviews, revisions, progression, provisioning, messages, and publishing; launch routes, authentication, security, presentation, and provisioning live under `src/launch/`, with orchestration at the entry points.

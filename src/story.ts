@@ -1,5 +1,5 @@
-import { scenarioFor, publicCharacter, renderLinks } from "./packages.ts";
-import type { Run, Assessment } from "./types.ts";
+import { publicCharacter, renderLinks, scenarioFor } from "./packages.ts";
+import type { Assessment, Run } from "./types.ts";
 export function storyEnding(result: Assessment, run: Run): string {
   const s = scenarioFor(run);
   return result.success === null

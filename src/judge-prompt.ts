@@ -1,3 +1,4 @@
+import { asRecord } from "./validation.ts";
 // Labels are mutually exclusive: consequence must not also fit identified.
 export const reviewCriteria = {
   absent:
@@ -42,14 +43,17 @@ export function validChoiceProbabilities(
 export function validReviewProbabilities(probabilities: unknown): boolean {
   return validChoiceProbabilities(probabilities, Object.keys(reviewCriteria));
 }
-export function readChoice(
-  answer: any,
-  criteria: Record<string, string>,
+export function readChoice<K extends string>(
+  input: unknown,
+  criteria: Record<K, string>,
   threshold: number,
-): string | undefined {
+): K | undefined {
+  const answer = asRecord(input);
   if (
     answer?.type !== "choice" ||
+    typeof answer.choice !== "string" ||
     !Object.hasOwn(criteria, answer.choice) ||
+    typeof answer.confidence !== "number" ||
     !Number.isFinite(answer.confidence) ||
     answer.confidence < threshold ||
     answer.confidence > 1 ||
@@ -58,5 +62,5 @@ export function readChoice(
     return;
   const values = answer.probabilities as Record<string, number>;
   if (values[answer.choice] + 0.01 < Math.max(...Object.values(values))) return;
-  return answer.choice;
+  return answer.choice as K;
 }

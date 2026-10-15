@@ -1,6 +1,6 @@
 # Review judge and coaching
 
-The deployed trial uses `@cf/cloudflare/clef-flash` through the existing Workers AI binding. Its request includes `model: "clef-flash"`, curated state, and typed questions. No provider API key or new service is needed.
+The Cloudflare Worker uses `@cf/cloudflare/clef-flash` through the existing Workers AI binding when judging is enabled. The request includes the model selector, curated state, and typed questions. No provider API key or new service is needed. Use `npm run cf:dev` to exercise this same Cloudflare AI path locally. The Node webhook service (`npm start`) is deterministic and does not call an AI provider; its default reviewer leaves review text unassessed.
 
 ## Gameplay and coaching
 
@@ -48,7 +48,7 @@ npm run judge:calibrate -- test/fixtures/judge-flash-validation.json @cf/cloudfl
 CALIBRATE_COACHING=true npm run judge:calibrate -- test/fixtures/review-coaching.json @cf/cloudflare/clef-flash
 ```
 
-The original Jev path remains available for local Node webhook deployments and comparison runs:
+The calibration script intentionally retains comparison-provider support, including Jev:
 
 ```bash
 npm run judge:calibrate -- all typesafe/jev
@@ -57,7 +57,7 @@ npm run judge:calibrate -- all @cf/cloudflare/clef
 
 The comparison runner defaults to each model's stated test cutoff; `CALIBRATION_THRESHOLD` can run an explicitly exploratory cutoff experiment. It uses the production parser and request shape, adding/removing the provider's required selector field. Allowances reset per invocation; they do not change or consume the production budget ledger.
 
-Observed results on 2026-10-15:
+Recorded calibration observations from 2026-10-15:
 
 - Original Jev prompt: 7/20 accepted at 0.9; revised prompt: 18/20 accepted, with no false concern credit. A fresh set accepted 10/12, also with no false credit. One additional rounding-related rejection was subsequently fixed.
 - Clef comparison at 0.9: Flash raw labels matched 30/32; full Clef matched 21/32; all answers abstained. The two Flash raw errors were grading-command examples, both rejected by confidence.
@@ -65,7 +65,7 @@ Observed results on 2026-10-15:
 - A subsequent fresh 16-review Flash set at 0.2 accepted 12/16, recognized 6/8 positives and awarded no false credit. This misses the earlier 80% positive-coverage target; the requested Flash trial keeps the conservative cutoff and leaves the two positives unassessed with the manual-revision fallback. List-price equivalent inference: $0.000673.
 - Coaching at 0.3 accepted 22 of 30 labelled dimensions across 16 reviews. Every accepted labelled dimension matched; eight were omitted. Examples covered praise, vague requests, personal insults, firm security objections, accessibility, duplication, formatting, mixed feedback and grading commands. List-price equivalent inference: $0.000758.
 
-These small authored sets are prototype evidence, not a general accuracy guarantee. The coaching experiment is separate from concern matching; improved tone or more comments never earns gameplay points. Next live check: submit a review in an active playthrough, verify any prepared revision, then finish and inspect the advisory debrief.
+These small authored sets are prototype evidence, not a general accuracy guarantee. The coaching experiment is separate from concern matching; improved tone or more comments never earns gameplay points. These recorded observations describe the authored calibration exercises; they do not establish general accuracy or verify the current work. For a fresh operational check, submit a review in an active playthrough, verify any prepared revision, then finish and inspect the advisory debrief.
 
 ## Provider alternatives
 

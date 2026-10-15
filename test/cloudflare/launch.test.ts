@@ -20,6 +20,7 @@ function fixture(
     blobs = new Map<string, string>(),
     refs = new Map<string, string>();
   let seq = 0,
+    commentSequence = 0,
     number = 0,
     created = !!options.existing,
     createCalls = 0;
@@ -174,7 +175,7 @@ function fixture(
       const number = Number(p.split("/")[2]),
         list = comments.get(number) ?? [];
       if (method === "POST") {
-        list.push({ ...body, user: { type: "Bot" } });
+        list.push({ ...body, id: ++commentSequence, user: { type: "Bot" } });
         comments.set(number, list);
         return response(list.at(-1), 201);
       }

@@ -3,7 +3,7 @@ const [command, ...args] = process.argv.slice(2);
 const url = process.env.WORKER_URL,
   token = process.env.ADMIN_TOKEN;
 if (!url || !token) throw new Error("Set WORKER_URL and ADMIN_TOKEN in .env");
-let path: string, body: any;
+let path: string, body: unknown;
 if (command === "seed") {
   const [
     installation,

@@ -51,6 +51,12 @@ test("workerd handles health, authentication, malformed requests, signed deliver
     );
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), []);
+    const archives = await mf.dispatchFetch(
+      "https://app/admin/archives?installation=1",
+      { headers },
+    );
+    assert.equal(archives.status, 200);
+    assert.deepEqual(await archives.json(), []);
     assert.equal(
       (
         await mf.dispatchFetch("https://app/admin/seed", {

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getPlatformProxy } from "wrangler";
-import { CloudJudge, unwrapJevResponse } from "../src/cloudflare/judge.ts";
+import { CloudJudge, unwrapJudgeResponse } from "../src/cloudflare/judge.ts";
 import { findPackage } from "../src/packages.ts";
 import type { Env } from "../src/cloudflare/env.ts";
 // Live, opt-in operator experiment. Uses the production classifier and request format.
@@ -67,7 +67,6 @@ try {
       (model === "@cf/cloudflare/clef-flash" ? "0.2" : "0.9"),
     REVIEW_COACHING_ENABLED: "true",
     COACH_CONFIDENCE_THRESHOLD: "0.3",
-    AI_GATEWAY_ID: undefined,
     BUDGET: { idFromName: () => "calibration", get: () => budget } as any,
     AI: {
       run: async (...args: any[]) => {
@@ -80,7 +79,7 @@ try {
             : stateAndQuestions;
           const raw = await (proxy.env.AI.run as any)(model, input, args[2]);
           latencyMs = performance.now() - started;
-          last = unwrapJevResponse(raw);
+          last = unwrapJudgeResponse(raw);
           return raw;
         } catch (error: any) {
           failure = String(error?.message ?? "Inference failed").slice(0, 250);

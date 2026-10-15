@@ -1,31 +1,39 @@
-import { launchRoute } from "./launch.ts";
+import { DurableObject } from "cloudflare:workers";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
+import { failureCode, report } from "../diagnostics.ts";
+import { initialRun } from "../engine.ts";
+import { Game } from "../game.ts";
+import { GitHub } from "../github.ts";
 import {
   catalog,
   findPackage,
   findPackageByDigest,
   scenarioFor,
 } from "../packages.ts";
-export { LaunchSession } from "./launch.ts";
-import { DurableObject } from "cloudflare:workers";
-import { createHash, timingSafeEqual, randomUUID } from "node:crypto";
 import { validSignature } from "../security.ts";
-import { Game } from "../game.ts";
-import { GitHub } from "../github.ts";
-import { initialRun } from "../engine.ts";
-import { CloudStore } from "./store.ts";
-import { CloudJudge } from "./judge.ts";
+import { InvalidData, parse, positiveId } from "../validation.ts";
+import { parseWebhook, webhookEvents } from "../webhooks.ts";
 import type { Env } from "./env.ts";
+import { CloudJudge } from "./judge.ts";
+import { launchRoute } from "./launch.ts";
+import { CloudStore } from "./store.ts";
 export { AIBudget } from "./budget.ts";
-const events = new Set([
-  "installation",
-  "installation_repositories",
-  "pull_request",
-  "pull_request_review",
-  "pull_request_review_comment",
-  "issue_comment",
-  "issues",
-  "push",
-]);
+export { LaunchSession } from "./launch.ts";
+const seedInput = z.object({
+  installation: positiveId,
+  repository: positiveId,
+  player: positiveId,
+  owner: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/),
+  repo: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/),
+  confirmDisposable: z.literal(true),
+  scenario: z.object({
+    id: z.string(),
+    version: z.string(),
+    stage: z.string(),
+    digest: z.string(),
+  }),
+});
 async function limitedBody(request: Request, max = 1000000) {
   const reader = request.body?.getReader();
   if (!reader) return Buffer.alloc(0);
@@ -80,6 +88,13 @@ export default {
             description: p.description,
             stages: p.stages.length,
             prs: p.stages.reduce((n, s) => n + s.proposals.length, 0),
+            preview: {
+              title: p.stages[0].title,
+              items: p.stages[0].issues.slice(0, 3).map((issue) => ({
+                title: issue.title,
+                detail: "Roadmap issue",
+              })),
+            },
           })),
         );
       const portrait = /^\/portraits\/([a-f0-9]{64})\/([a-z0-9-]+)\.svg$/.exec(
@@ -162,9 +177,12 @@ export default {
           event = request.headers.get("x-github-event");
         if (!id || id.length > 100 || !event)
           return new Response(null, { status: 400 });
-        const payload = JSON.parse(raw.toString());
+        const rawPayload: unknown = JSON.parse(raw.toString());
+        if (!webhookEvents.has(event))
+          return new Response(null, { status: 202 });
+        const payload = parseWebhook(rawPayload);
         if (
-          !events.has(event) ||
+          !webhookEvents.has(event) ||
           !Number.isSafeInteger(payload.installation?.id)
         )
           return new Response(null, { status: 202 });
@@ -179,21 +197,30 @@ export default {
       if (url.pathname.startsWith("/admin/")) {
         if (!authorized(request, env.ADMIN_TOKEN))
           return new Response(null, { status: 401 });
-        if (url.pathname === "/admin/status" && request.method === "GET") {
+        if (
+          ["/admin/status", "/admin/diagnostics", "/admin/archives"].includes(
+            url.pathname,
+          ) &&
+          request.method === "GET"
+        ) {
           const installation = Number(url.searchParams.get("installation"));
           if (!Number.isSafeInteger(installation) || installation <= 0)
             return new Response(null, { status: 400 });
           return env.GAMES.get(
             env.GAMES.idFromName(String(installation)),
-          ).fetch("https://game/status");
+          ).fetch("https://game/" + url.pathname.split("/").at(-1));
         }
         if (
           request.method === "POST" &&
           ["/admin/seed", "/admin/retry"].includes(url.pathname)
         ) {
-          const input = JSON.parse(
+          const data: unknown = JSON.parse(
             (await limitedBody(request, 16000)).toString(),
           );
+          const input =
+            url.pathname === "/admin/seed"
+              ? parse(seedInput, data)
+              : parse(z.object({ installation: positiveId }), data);
           if (
             !Number.isSafeInteger(input.installation) ||
             input.installation <= 0
@@ -209,11 +236,23 @@ export default {
       }
       return new Response(null, { status: 404 });
     } catch (error) {
+      report({
+        component: "http",
+        event: "request_failed",
+        reason: failureCode(error),
+      });
       return new Response(
         error instanceof SyntaxError
           ? "Invalid JSON"
-          : "Temporarily unavailable",
-        { status: error instanceof SyntaxError ? 400 : 503 },
+          : error instanceof InvalidData
+            ? "Invalid request"
+            : "Temporarily unavailable",
+        {
+          status:
+            error instanceof SyntaxError || error instanceof InvalidData
+              ? 400
+              : 503,
+        },
       );
     }
   },
@@ -243,6 +282,8 @@ export class GameSession extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (path === "/status") return Response.json(this.store.all());
+    if (path === "/archives") return Response.json(this.store.archives());
+    if (path === "/diagnostics") return Response.json(this.store.failures());
     if (path === "/progress") {
       const run = this.store
         .all()
@@ -253,16 +294,12 @@ export class GameSession extends DurableObject<Env> {
         );
       return Response.json({
         phase: run?.phase,
-        failed: !!(
-          run &&
-          this.store.db
-            .prepare("SELECT id FROM deliveries WHERE id=? AND status='failed'")
-            .get("seed:" + run.id)
-        ),
+        failed: !!(run && this.store.hasFailed("seed:" + run.id)),
       });
     }
-    const input = (await request.json()) as any;
+    const rawInput: unknown = await request.json();
     if (path === "/seed") {
+      const input = parse(seedInput, rawInput);
       if (
         input.confirmDisposable !== true ||
         ![input.repository, input.player].every(
@@ -318,35 +355,32 @@ export class GameSession extends DurableObject<Env> {
       );
     }
     if (path === "/retry") {
-      this.store.db
-        .prepare(
-          "UPDATE deliveries SET status='pending',attempts=0,next=0 WHERE status='failed'",
-        )
-        .run();
+      this.store.retryFailed();
       await this.ctx.storage.setAlarm(Date.now() + 100);
       return Response.json({ status: "queued" });
     }
     if (path === "/enqueue") {
-      if (!this.store.all().length) return new Response(null, { status: 202 });
+      const input = parse(
+        z.object({ id: z.string(), event: z.string(), payload: z.unknown() }),
+        rawInput,
+      );
+      const payload = parseWebhook(input.payload);
+      if (!payload.repository && !this.store.all().length)
+        return new Response(null, { status: 202 });
       if (
-        input.payload.repository &&
-        !this.store
-          .all()
-          .some((r) => r.repository === input.payload.repository.id)
+        payload.repository &&
+        this.store.forRepository(payload.repository.id).length === 0
       )
         return new Response(null, { status: 202 });
       await this.ctx.storage.setAlarm(Date.now() + 100);
-      this.store.enqueue(input.id, input.event, JSON.stringify(input.payload));
+      this.store.enqueue(input.id, input.event, JSON.stringify(payload));
       return new Response(null, { status: 202 });
     }
     return new Response(null, { status: 404 });
   }
   async alarm() {
-    const row = this.store.db
-      .prepare(
-        "SELECT * FROM deliveries WHERE status='pending' AND next<=? ORDER BY rowid LIMIT 1",
-      )
-      .get(Date.now());
+    this.store.prune();
+    const row = this.store.nextDelivery();
     try {
       if (row) {
         try {
@@ -354,21 +388,15 @@ export class GameSession extends DurableObject<Env> {
             const run = this.store.get(JSON.parse(row.body).id);
             if (run.phase === "seeding") await this.game.seed(run);
           } else await this.game.process(row.event, JSON.parse(row.body));
-          this.store.db
-            .prepare("UPDATE deliveries SET status='done' WHERE id=?")
-            .run(row.id);
-        } catch {
-          const attempts = row.attempts + 1;
-          this.store.db
-            .prepare(
-              "UPDATE deliveries SET attempts=?,next=?,status=? WHERE id=?",
-            )
-            .run(
-              attempts,
-              Date.now() + Math.min(60000, 1000 * 2 ** attempts),
-              attempts >= 5 ? "failed" : "pending",
-              row.id,
-            );
+          this.store.completeDelivery(row.id);
+        } catch (error) {
+          this.store.failDelivery(row, error);
+          report({
+            component: "game",
+            event: "delivery_failed",
+            reason: failureCode(error),
+            delivery: row.id,
+          });
         }
       } else {
         for (const r of this.store.all())
@@ -383,15 +411,9 @@ export class GameSession extends DurableObject<Env> {
             );
       }
     } finally {
-      const pending = this.store.db
-        .prepare(
-          "SELECT MIN(next) AS due FROM deliveries WHERE status='pending'",
-        )
-        .get();
-      if (pending?.due !== null && pending?.due !== undefined)
-        await this.ctx.storage.setAlarm(
-          Math.max(Date.now() + 100, pending.due),
-        );
+      const due = this.store.nextDeliveryTime();
+      if (due !== undefined)
+        await this.ctx.storage.setAlarm(Math.max(Date.now() + 100, due));
       else if (
         this.store.all().some((r) => ["active", "finishing"].includes(r.phase))
       )

@@ -243,9 +243,14 @@ for (const pack of [
         );
         write(
           "__scenario__/stages/launch/prs/example.md",
-          "---\nid: example\ntitle: Set the value\ncharacter: sam\nissue: value\nrevisions: 0\nassessment:\n  initial:\n    sound: true\n    explanation: Meets the requirement\n---\nHere is the change.\n\n<!-- debrief -->\n\nTrace the requirement.",
+          "---\nid: example\ntitle: Set the value\ncharacter: sam\nissue: value\nrevisions: 0\nassessment:\n  initial:\n    explanation: Meets the requirement\n    sound: true\n---\nHere is the change.\n\n<!-- debrief -->\n\nTrace the requirement.",
         );
         const fresh = publishScenario(repo);
+        // Metadata order participates in immutable published package hashes.
+        assert.deepEqual(
+          Object.keys(fresh.stages[0].proposals[0].variants[0]).slice(0, 2),
+          ["explanation", "sound"],
+        );
         assert.deepEqual(fresh.stages[0].proposals[0].variants[0].deletes, [
           "obsolete.ts",
         ]);

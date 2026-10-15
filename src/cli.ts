@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { Store } from "./store.ts";
+import { assess, debrief, initialRun } from "./engine.ts";
 import { Game } from "./game.ts";
-import { initialRun, assess, debrief } from "./engine.ts";
+import { GitHub } from "./github.ts";
 import {
   catalog,
   findPackage,
-  selectScenario,
   scenarioFor,
+  selectScenario,
 } from "./packages.ts";
 import { server } from "./server.ts";
+import { Store } from "./store.ts";
 const [cmd, ...args] = process.argv.slice(2);
 function demo() {
   const pack = catalog()[0];
@@ -44,7 +45,9 @@ async function main() {
     return;
   }
   const store = new Store(process.env.DATABASE_PATH),
-    game = new Game(store);
+    game = new Game(store, (run) =>
+      GitHub.installation(run.installation, run.repository),
+    );
   if (cmd === "serve") {
     // Resume interrupted publication without depending on another webhook.
     for (const r of store.all())
@@ -114,11 +117,7 @@ async function main() {
     } else if (cmd === "status") {
       console.log(JSON.stringify(store.all(), null, 2));
     } else if (cmd === "retry-deliveries") {
-      store.db
-        .prepare(
-          "UPDATE deliveries SET status='pending',attempts=0,next=0 WHERE status='failed'",
-        )
-        .run();
+      store.retryFailed();
       console.log("Failed deliveries queued");
     } else
       throw new Error(

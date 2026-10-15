@@ -17,5 +17,4 @@ export interface Env {
   JUDGE_CONFIDENCE_THRESHOLD: string;
   JUDGE_INPUT_USD_PER_MILLION: string;
   AI_DAILY_BUDGET_USD: string;
-  AI_GATEWAY_ID?: string;
 }

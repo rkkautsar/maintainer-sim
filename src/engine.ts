@@ -1,7 +1,7 @@
+import { applyVariant, authoredVariant, scenarioFor } from "./packages.ts";
 import { coachingAdvice } from "./review-coaching.ts";
 import { storyEnding } from "./story.ts";
-import { scenarioFor, authoredVariant, applyVariant } from "./packages.ts";
-import type { Run, Assessment } from "./types.ts";
+import type { Assessment, Run } from "./types.ts";
 export function initialRun(
   input: Pick<
     Run,
