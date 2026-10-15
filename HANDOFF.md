@@ -74,7 +74,7 @@ Verify raw-body HMAC-SHA256 signatures with constant-time comparison. Durably re
 
 Keep App/provider credentials in the trusted service outside source control/logs. Scope short-lived installation tokens to the selected repository. Never execute player code in the App service. Judge inputs are untrusted data; its outputs cannot execute code or mutate repositories.
 
-Require disposable repositories with no secrets and GitHub Actions disabled by the operator. Validate the known baseline; reject unexpected workflows. Bound comments/patches, authorize runs, and rate-limit per player and globally.
+Use disposable game repositories. GitHub Actions may remain enabled; authored CI should use read-only permissions and no secrets. Validate the known baseline and reject unexpected workflow changes. Bound comments/patches, authorize runs, and rate-limit per player and globally.
 
 Support merge/squash/rebase for known authored content without relying only on original commit ancestry. Associate reviews with revisions. Detect player edits, altered heads, unexpected collaborator changes, and reversions; pause scoring and offer a fresh-stage restart while preserving work.
 

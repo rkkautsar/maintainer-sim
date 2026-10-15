@@ -26,7 +26,7 @@ npm run cli -- export-template /tmp/pocket-board-template
 
 Initialize that exported directory as a separate Git repository and push it to a disposable player-owned repository. You can mark it as a GitHub template for subsequent players, or fork it. Its root must exactly match the export. Start with no previous issues or PRs (including deleted ones), so Game Master receives #1. Do not copy this game-master repository: `src/scenario.ts` contains the hidden rubric and prepared answers.
 
-Disable GitHub Actions in the player repository and ensure it has no secrets. Avoid rulesets that prevent App branch creation or player merges. The prototype does not bypass protections. Each new stage/run uses a fresh repository so previous work is preserved.
+GitHub Actions may remain enabled. The current template has no workflows; future authored CI should run tests/lint with read-only permissions and no secrets. Unexpected workflow changes are rejected by the existing exact-content checks. Avoid rulesets that prevent App branch creation or player merges. The prototype does not bypass protections. Each new stage/run uses a fresh repository so previous work is preserved.
 
 ## Register the GitHub App
 
@@ -39,7 +39,7 @@ Create an App with a secret and webhook URL ending in `/webhooks`. Select reposi
 
 Subscribe to `installation`, `installation_repositories`, `pull_request`, `pull_request_review`, `pull_request_review_comment`, `issue_comment`, `issues`, and `push`. Install on the selected disposable repository, not all repositories. Save the App private key outside this project and set restrictive file permissions.
 
-Copy `.env.example` to `.env`; fill App ID, key path, webhook secret, and `DISPOSABLE_REPO_CONFIRMED=true` only after verifying the prerequisites. The App deliberately has no Actions or Administration permissions, so disabled Actions is an operator prerequisite rather than an API-verified check.
+Copy `.env.example` to `.env`; fill App ID, key path, webhook secret, and `DISPOSABLE_REPO_CONFIRMED=true` only after verifying the prerequisites. The App needs no Actions or Administration permissions; enabling Actions does not require additional App access.
 
 ```bash
 npm run cli -- seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_GITHUB_ID

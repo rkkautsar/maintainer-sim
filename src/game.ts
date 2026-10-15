@@ -56,7 +56,6 @@ export class Game {
       repository.disabled
     )
       throw new Error("Invalid target repository");
-    // Actions must be disabled by the operator; checking its settings would require an extra App permission.
     if (r.phase !== "seeding") throw new Error("Run is not seeding");
     if (!r.baseline) {
       r.base = repository.default_branch;

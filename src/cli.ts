@@ -86,7 +86,7 @@ async function main() {
         );
       if (process.env.DISPOSABLE_REPO_CONFIRMED !== "true")
         throw new Error(
-          "Confirm no secrets and Actions disabled with DISPOSABLE_REPO_CONFIRMED=true",
+          "Confirm this is a disposable game repository with DISPOSABLE_REPO_CONFIRMED=true",
         );
       if (store.all().some((r) => r.repository === Number(repository)))
         throw new Error(
