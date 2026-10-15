@@ -64,6 +64,8 @@ export class Game {
         throw new Error(
           "Target does not exactly match scenario/public baseline",
         );
+      if ((await gh.list(root + "/issues?state=all")).length)
+        throw new Error("Start in a fresh repository without issues or PRs");
       r.baseline = ref.object.sha;
       this.store.save(r);
     }

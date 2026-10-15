@@ -1,3 +1,4 @@
+import { installationCandidates, startCandidate } from "../onboarding.ts";
 import { DurableObject } from "cloudflare:workers";
 import { createHash, timingSafeEqual, randomUUID } from "node:crypto";
 import { validSignature } from "../security.ts";
@@ -206,7 +207,17 @@ export class GameSession extends DurableObject<Env> {
       return Response.json({ status: "queued" });
     }
     if (path === "/enqueue") {
-      // Do not retain unrelated events or allocate jobs for installations with no runs.
+      const candidates = installationCandidates(input.event, input.payload);
+      if (candidates.length) {
+        await this.ctx.storage.setAlarm(Date.now() + 100);
+        for (const candidate of candidates)
+          this.store.enqueue(
+            "auto-start:" + candidate.repository + ":" + input.id,
+            "auto-start",
+            JSON.stringify(candidate),
+          );
+      }
+      // Installation events can bootstrap a run; unrelated repository events cannot.
       if (!this.store.all().length) return new Response(null, { status: 202 });
       if (
         input.payload.repository &&
@@ -230,7 +241,9 @@ export class GameSession extends DurableObject<Env> {
     try {
       if (row) {
         try {
-          if (row.event === "seed") {
+          if (row.event === "auto-start") {
+            await startCandidate(this.game, JSON.parse(row.body));
+          } else if (row.event === "seed") {
             const run = this.store.get(JSON.parse(row.body).id);
             if (run.phase === "seeding") await this.game.seed(run);
           } else await this.game.process(row.event, JSON.parse(row.body));

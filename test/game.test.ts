@@ -393,3 +393,52 @@ test("human exchanges are replay-safe and manual revisions do not imply concern 
     s.close();
   }
 });
+
+test("installation onboarding seeds a matching fresh repository only once", async () => {
+  const { startCandidate } = await import("../src/onboarding.ts");
+  const s = new Store(":memory:"),
+    fake = new Fake(),
+    game = new Game(s, async () => fake as unknown as GitHub);
+  const candidate = {
+    installation: 1,
+    repository: 2,
+    owner: "owner",
+    repo: "game",
+    player: 3,
+  };
+  try {
+    await startCandidate(game, candidate);
+    await startCandidate(game, candidate);
+    assert.equal(s.all().length, 1);
+    assert.equal(s.all()[0].master, 1);
+    assert.equal(fake.prs.length, 6);
+  } finally {
+    s.close();
+  }
+});
+
+test("automatic onboarding leaves unrelated or nonempty repositories untouched", async () => {
+  const { startCandidate } = await import("../src/onboarding.ts");
+  for (const kind of ["unrelated", "nonempty"]) {
+    const s = new Store(":memory:"),
+      fake = new Fake(),
+      game = new Game(s, async () => fake as unknown as GitHub);
+    if (kind === "unrelated")
+      fake.files.baseline = { "README.md": "Different project" };
+    else fake.issues.push({ number: 1, body: "Existing work" });
+    try {
+      await startCandidate(game, {
+        installation: 1,
+        repository: 2,
+        owner: "owner",
+        repo: "game",
+        player: 3,
+      });
+      assert.equal(s.all().length, 0);
+      assert.equal(fake.milestones.length, 0);
+      assert.equal(fake.prs.length, 0);
+    } finally {
+      s.close();
+    }
+  }
+});

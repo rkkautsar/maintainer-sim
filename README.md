@@ -2,6 +2,14 @@
 
 A GitHub-native review training MVP. A GitHub App seeds a small full-stack TypeScript noticeboard with one milestone, three issues, six community PRs, and Game Master issue #1, which tells the Saturday-launch story and links the milestone and contributions. Players make native review/merge/close decisions. Prepared revisions and authored outcome scoring keep the game deterministic; optional Jev matching assesses review concerns.
 
+## Player quickstart
+
+1. Create a fresh repository using [Pocket Board's template](https://github.com/rkkautsar/pocket-board-template).
+2. Install the configured Maintainer Sim GitHub App on that repository, or add it to an existing installation.
+3. Open Game Master issue **#1** when automatic setup finishes.
+
+No operator CLI or Actions setting change is needed for this hosted flow. App registration, Worker secrets, and webhook delivery must be configured first. The CLI below remains for local development and operator recovery.
+
 ## Run locally
 
 Requires Node.js 24 or newer and npm.
@@ -171,3 +179,11 @@ Pocket Board is now a runnable full-stack exercise: a vanilla browser UI, Node.j
 The exported player repository also runs independently with `npm start`, with no package dependencies. Demo user selection is intentionally local role switching, not production authentication; the server binds localhost. Data is stored in ignored `data/board.sqlite`. Runtime files must not be committed into the exercise. The game master does not run submitted code; the player may run their disposable app locally.
 
 The initial full-stack source is tested as a working baseline and with all authored fixes applied, including persistence across restart, like idempotency, API ownership enforcement, and malformed pagination. New app assets change the expected baseline: use a fresh template export for new runs rather than an older library-only repository.
+
+## Automatic player onboarding
+
+Create a fresh repository from `rkkautsar/pocket-board-template`, then install the configured GitHub App on it (or add the repository to an existing installation). The signed `installation.created` or `installation_repositories.added` webhook queues setup automatically. The human who installs/adds the repository becomes the designated player.
+
+Before creating any milestone, issue or PR, onboarding checks the exact public baseline and that the repository has no existing issues/PRs. The template itself, archived repositories, unrelated codebases, and repositories already in a run are skipped. Retried setup resumes without duplicate stage objects. Actions may stay enabled. The operator seed CLI remains available for troubleshooting.
+
+Automatic onboarding requires the GitHub App registration, installation webhook delivery, and App secrets to be configured in the Worker; publishing a template alone cannot grant repository access.
