@@ -1,5 +1,5 @@
 import type { Job } from "./types.ts";
-export function publicLaunch(job: Job | undefined, slug = "maintainer-sim") {
+export function publicLaunch(job: Job | undefined, slug = "pr-flood") {
   if (!job) return {};
   const labels: Record<string, [string, string]> = {
     creating: [

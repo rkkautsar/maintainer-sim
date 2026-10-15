@@ -47,7 +47,7 @@
     "JUDGE_INPUT_USD_PER_MILLION": "0.038",
     "AI_DAILY_BUDGET_USD": "1",
     "GITHUB_CLIENT_ID": "Iv23liIU7hVd8ynBoZN4",
-    "GITHUB_APP_SLUG": "maintainer-sim",
+    "GITHUB_APP_SLUG": "pr-flood",
     "PUBLIC_ORIGIN": "https://pr-flood.lol",
   },
   "observability": {

@@ -2,7 +2,7 @@
 
 Practice maintaining a real open-source project through GitHub reviews. Follow the story in Game Master issue #1, inspect competing contributions, request prepared revisions, and decide what to merge or close. Each stage has a milestone, linked issues, unsolicited PRs, and a debrief about delivery, defects, and maintenance costs.
 
-[Play](https://pr-flood.lol/) · [GitHub App](https://github.com/apps/maintainer-sim) · [App settings](https://github.com/settings/apps/maintainer-sim) · [Install App](https://github.com/apps/maintainer-sim/installations/new)
+[Play](https://pr-flood.lol/) · [GitHub App](https://github.com/apps/pr-flood) · [App settings](https://github.com/settings/apps/pr-flood) · [Install App](https://github.com/apps/pr-flood/installations/new)
 
 The first scenario is **Forum**: a runnable Express, React, and SQLite application with five initial roadmap issues, ten launch PRs, and a second notification stage. Its [authoring repository](https://github.com/rkkautsar/forum-scenario) holds real stage and contribution branches. Player repositories contain application code; the game service keeps the rubric and prepared answers.
 

@@ -10,7 +10,7 @@ The scenario repository publishes version tags through the trusted workflow in [
 
 Set `SCENARIO_REPOSITORIES` in `wrangler.jsonc` to a comma-separated `owner/repository` allowlist. The same variable works for local development; it contains no credential.
 
-Open [PR Flood settings](https://github.com/settings/apps/maintainer-sim) to configure the existing [GitHub App](https://github.com/apps/maintainer-sim). Its [installation page](https://github.com/apps/maintainer-sim/installations/new) grants access to player repositories.
+Open [PR Flood settings](https://github.com/settings/apps/pr-flood) to configure the existing [GitHub App](https://github.com/apps/pr-flood). Its [installation page](https://github.com/apps/pr-flood/installations/new) grants access to player repositories.
 
 Configure:
 
