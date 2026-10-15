@@ -97,3 +97,28 @@ test("incomplete or failed Cloudflare envelopes cannot grant review credit", asy
     assert.equal(f.calls.length, 1);
   }
 });
+
+test("two-decimal Jev probabilities tolerate rounding but reject malformed distributions", async () => {
+  const rounded = response();
+  rounded.answers.identification.probabilities = {
+    absent: 0,
+    vague: 0.02,
+    identified: 0.04,
+    consequence: 0.93,
+  };
+  assert.equal(
+    await fixture(rounded).judge.evaluate("review", "concern", {}),
+    "consequence",
+  );
+  const invalid = response();
+  invalid.answers.identification.probabilities = {
+    absent: 0,
+    vague: 0.2,
+    identified: 0.1,
+    consequence: 0.93,
+  };
+  assert.equal(
+    await fixture(invalid).judge.evaluate("review", "concern", {}),
+    undefined,
+  );
+});

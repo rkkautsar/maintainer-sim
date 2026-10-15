@@ -9,7 +9,7 @@ const rate = 0.042,
   limit = 0.05,
   reservation = (32000 * rate) / 1e6;
 const fixtures = JSON.parse(
-  readFileSync("test/fixtures/judge-reviews.json", "utf8"),
+  readFileSync(process.argv[2] ?? "test/fixtures/judge-reviews.json", "utf8"),
 );
 const pack = findPackage("forum", "0.1.0");
 const charges = new Map<
@@ -82,6 +82,7 @@ try {
       actual: actual ?? "unassessed",
       rawChoice: last?.answers?.identification?.choice,
       confidence: last?.answers?.identification?.confidence,
+      probabilities: last?.answers?.identification?.probabilities,
       inputTokens: last?.usage?.input_tokens,
     });
     console.log(JSON.stringify(results.at(-1)));

@@ -75,7 +75,7 @@ Run `npm run scenario` for all commands and arguments. The Worker build bundles 
 
 Roadmap progress and merge/close outcomes use the authored rubric. The debrief explains accepted defects, maintenance debt, and missed requirements. Review effort is informational. Without a calibrated judge, review wording is explicitly unassessed; requesting a revision alone does not earn concern-identification credit.
 
-See [Jev setup and calibration](docs/JUDGE.md) to run the labelled review trial. Optional Jev matching can assess review text against a curated concern. It is disabled by default. Enabling it requires credentials, configured pricing, and `JEV_CALIBRATED=true` after calibration. Requests use bounded context, cached results, and atomic budget reservations. The configured shared cap is **$1 per UTC day**, across all players. At the cap or on judge failure, deterministic outcomes and debriefs continue; review wording remains unassessed. There is no live AI code generation in this version.
+See [Jev setup and calibration](docs/JUDGE.md) to run the labelled review trial. Optional Jev matching can assess review text against a curated concern. The deployed trial is enabled after the labelled Forum calibration; new environments should keep it disabled until their calibration passes. Enabling it requires credentials, configured pricing, and `JEV_CALIBRATED=true` after calibration. Requests use bounded context, cached results, and atomic budget reservations. The configured shared cap is **$1 per UTC day**, across all players. At the cap or on judge failure, deterministic outcomes and debriefs continue; review wording remains unassessed. There is no live AI code generation in this version.
 
 ## Operator commands
 

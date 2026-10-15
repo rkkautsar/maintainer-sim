@@ -42,7 +42,7 @@
     "binding": "AI"
   },
   "vars": {
-    "JEV_CALIBRATED": "false",
+    "JEV_CALIBRATED": "true",
     "JEV_CONFIDENCE_THRESHOLD": "0.9",
     "JEV_INPUT_USD_PER_MILLION": "0.042",
     "AI_DAILY_BUDGET_USD": "1",
