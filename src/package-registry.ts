@@ -3,7 +3,7 @@ import { z } from "zod";
 import { GitHub } from "./github.ts";
 import { packageScope, type ScenarioPackage } from "./packages.ts";
 import { parse } from "./validation.ts";
-import { errorStatus } from "./diagnostics.ts";
+import { errorStatus, failureCode, report } from "./diagnostics.ts";
 
 export async function publicRequest(
   input: Parameters<typeof fetch>[0],
@@ -26,6 +26,18 @@ export async function publicRequest(
   }
   if (cached) return cached;
   const response = await sourceFetch(request);
+  if (!response.ok && new URL(request.url).hostname === "api.github.com") {
+    const limited =
+      response.headers.get("x-ratelimit-remaining") === "0" ||
+      response.headers.has("retry-after");
+    report({
+      component: "http",
+      event: "scenario_source_rejected",
+      reason: limited
+        ? "rate_limited"
+        : failureCode({ status: response.status }),
+    });
+  }
   if (edge && response.ok) {
     const copy = new Response(response.clone().body, response);
     copy.headers.set("cache-control", "public,max-age=300");
@@ -42,6 +54,16 @@ export async function publicRequest(
 
 const id = z.string().regex(/^[a-z][a-z0-9-]{0,47}$/);
 const version = z.string().regex(/^\d+\.\d+\.\d+$/);
+const manifestSchema = z
+  .object({
+    schema: z.literal(1),
+    id,
+    version,
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
+    asset: z.literal("scenario.json"),
+  })
+  .strict();
+type Manifest = z.infer<typeof manifestSchema>;
 const files = z.record(z.string(), z.string());
 const variant = z
   .object({
@@ -168,12 +190,16 @@ export interface PackagePersistence {
 }
 
 export class GitHubPackageRegistry {
-  private metadata?: {
-    until: number;
-    releases: { repo: string; release: Release }[];
-  };
+  private metadata = new Map<
+    string,
+    {
+      until: number;
+      releases: Release[];
+    }
+  >();
   private tokens = new Map<string, { until: number; api: GitHub }>();
   private packages = new Map<string, ScenarioPackage>();
+  private latestPackages?: { until: number; packages: ScenarioPackage[] };
   private publicRepositories = new Set<string>();
   private config: RegistryConfig;
   constructor(config: RegistryConfig) {
@@ -251,11 +277,15 @@ export class GitHubPackageRegistry {
     return api;
   }
 
-  private async releases() {
-    if (this.metadata && this.metadata.until > Date.now())
-      return this.metadata.releases;
+  private async releases(repositories = this.repositories()) {
     const releases: { repo: string; release: Release }[] = [];
-    for (const repo of this.repositories()) {
+    for (const repo of repositories) {
+      const cached = this.metadata.get(repo);
+      if (cached && cached.until > Date.now()) {
+        releases.push(...cached.releases.map((release) => ({ repo, release })));
+        continue;
+      }
+      const repoReleases: Release[] = [];
       const api = await this.api(repo);
       for (let page = 1; page <= 10; page++) {
         const values = parse(
@@ -268,15 +298,91 @@ export class GitHubPackageRegistry {
             !release.prerelease &&
             /^v\d+\.\d+\.\d+$/.test(release.tag_name)
           )
-            releases.push({ repo, release });
+            repoReleases.push(release);
         }
         if (values.length < 100) break;
         if (page === 10)
           throw new Error("Scenario registry release limit exceeded");
       }
+      this.metadata.set(repo, {
+        until: Date.now() + 5 * 60000,
+        releases: repoReleases,
+      });
+      releases.push(...repoReleases.map((release) => ({ repo, release })));
     }
-    this.metadata = { until: Date.now() + 5 * 60000, releases };
     return releases;
+  }
+
+  private async manifest(repo: string, tag: "latest" | `v${string}`) {
+    if (tag !== "latest" && !/^v\d+\.\d+\.\d+$/.test(tag))
+      throw new Error("Invalid scenario release tag");
+    const path =
+      tag === "latest"
+        ? `https://github.com/${repo}/releases/latest/download/scenario-manifest.json`
+        : `https://github.com/${repo}/releases/download/${tag}/scenario-manifest.json`;
+    const response = await fetch(path);
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new Error("Scenario manifest download failed");
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Scenario manifest download is empty");
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      size += chunk.value.length;
+      if (size > 16000) {
+        await reader.cancel();
+        throw new Error("Scenario manifest exceeds size limit");
+      }
+      chunks.push(chunk.value);
+    }
+    const parsed = manifestSchema.safeParse(
+      JSON.parse(Buffer.concat(chunks).toString("utf8")),
+    );
+    if (!parsed.success) throw new Error("Invalid scenario manifest");
+    return parsed.data;
+  }
+
+  private cachePackage(key: string, pack: ScenarioPackage) {
+    if (this.packages.size >= 24)
+      this.packages.delete(this.packages.keys().next().value!);
+    this.packages.set(key, pack);
+  }
+
+  private async loadManifest(repo: string, manifest: Manifest) {
+    const key = `${repo}:v${manifest.version}:${manifest.digest}`;
+    const cached = this.packages.get(key);
+    if (cached) return cached;
+    const response = await fetch(
+      `https://github.com/${repo}/releases/download/v${manifest.version}/${manifest.asset}`,
+    );
+    if (!response.ok) throw new Error("Scenario package download failed");
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Scenario package download is empty");
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      size += chunk.value.length;
+      if (size > 1900000) {
+        await reader.cancel();
+        throw new Error("Scenario package download exceeds size limit");
+      }
+      chunks.push(chunk.value);
+    }
+    const pack = validatePackage(
+      JSON.parse(Buffer.concat(chunks).toString("utf8")),
+    );
+    if (
+      pack.id !== manifest.id ||
+      pack.version !== manifest.version ||
+      pack.digest !== manifest.digest
+    )
+      throw new Error("Scenario manifest does not match package");
+    this.cachePackage(key, pack);
+    return pack;
   }
 
   private async load(repo: string, release: Release) {
@@ -340,47 +446,63 @@ export class GitHubPackageRegistry {
       throw new Error(
         "Scenario release digest metadata does not match package",
       );
-    if (this.packages.size >= 24)
-      this.packages.delete(this.packages.keys().next().value!);
-    this.packages.set(key, pack);
+    this.cachePackage(key, pack);
     return pack;
   }
 
   async latest() {
-    const latest = new Map<string, { repo: string; release: Release }>();
-    for (const item of await this.releases()) {
-      const previous = latest.get(item.repo);
-      if (
-        !previous ||
-        item.release.tag_name
+    if (this.latestPackages && this.latestPackages.until > Date.now())
+      return this.latestPackages.packages;
+    const packages: ScenarioPackage[] = [];
+    for (const repo of this.repositories()) {
+      const manifest = await this.manifest(repo, "latest");
+      if (manifest) {
+        packages.push(await this.loadManifest(repo, manifest));
+        continue;
+      }
+      const candidates = (await this.releases([repo])).sort((a, b) =>
+        b.release.tag_name
           .slice(1)
-          .localeCompare(previous.release.tag_name.slice(1), undefined, {
+          .localeCompare(a.release.tag_name.slice(1), undefined, {
             numeric: true,
-          }) > 0
-      )
-        latest.set(item.repo, item);
+          }),
+      );
+      if (candidates[0])
+        packages.push(await this.load(repo, candidates[0].release));
     }
-    const packages = await Promise.all(
-      [...latest.values()].map((item) => this.load(item.repo, item.release)),
-    );
     if (new Set(packages.map((p) => p.id)).size !== packages.length)
       throw new Error("Duplicate scenario IDs in registry");
+    this.latestPackages = { until: Date.now() + 5 * 60000, packages };
     return packages;
   }
 
   async byDigest(digest: string) {
     const cached = [...this.packages.values()].find((p) => p.digest === digest);
     if (cached) return cached;
-    const entry = (await this.releases()).find(
-      ({ release }) =>
-        release.body?.match(/^Scenario SHA-256: ([a-f0-9]{64})$/m)?.[1] ===
-        digest,
-    );
-    if (entry) {
-      const pack = await this.load(entry.repo, entry.release);
-      if (pack.digest !== digest)
-        throw new Error("Release digest metadata mismatch");
-      return pack;
+    const legacyRepos: string[] = [];
+    const manifestRepos: string[] = [];
+    for (const repo of this.repositories()) {
+      const manifest = await this.manifest(repo, "latest");
+      if (manifest?.digest === digest) {
+        const pack = await this.loadManifest(repo, manifest);
+        if (pack.digest !== digest)
+          throw new Error("Scenario manifest digest mismatch");
+        return pack;
+      }
+      (manifest ? manifestRepos : legacyRepos).push(repo);
+    }
+    for (const repo of [...legacyRepos, ...manifestRepos]) {
+      const entry = (await this.releases([repo])).find(
+        ({ release }) =>
+          release.body?.match(/^Scenario SHA-256: ([a-f0-9]{64})$/m)?.[1] ===
+          digest,
+      );
+      if (entry) {
+        const pack = await this.load(entry.repo, entry.release);
+        if (pack.digest !== digest)
+          throw new Error("Release digest metadata mismatch");
+        return pack;
+      }
     }
     return undefined;
   }
@@ -406,14 +528,36 @@ export class GitHubPackageRegistry {
         throw new Error("Cached scenario identity mismatch");
       return pack;
     }
-    for (const { repo, release } of await this.releases()) {
-      if (release.tag_name !== `v${selection.version}`) continue;
-      const pack = await this.load(repo, release);
-      if (pack.id !== selection.id) continue;
-      if (selection.digest && pack.digest !== selection.digest)
+    if (!/^\d+\.\d+\.\d+$/.test(selection.version))
+      throw new Error("Invalid scenario version");
+    const legacyRepos: string[] = [];
+    for (const repo of this.repositories()) {
+      const manifest = await this.manifest(repo, `v${selection.version}`);
+      if (!manifest) {
+        const latestManifest = await this.manifest(repo, "latest");
+        if (latestManifest && latestManifest.id !== selection.id) continue;
+        legacyRepos.push(repo);
+        continue;
+      }
+      if (manifest.version !== selection.version)
+        throw new Error("Scenario manifest version mismatch");
+      if (manifest.id !== selection.id) continue;
+      if (selection.digest && manifest.digest !== selection.digest)
         throw new Error("Pinned scenario release changed");
+      const pack = await this.loadManifest(repo, manifest);
       if (storage) await storage.put(`scenario:${pack.digest}`, pack);
       return pack;
+    }
+    for (const repo of legacyRepos) {
+      for (const { release } of await this.releases([repo])) {
+        if (release.tag_name !== `v${selection.version}`) continue;
+        const pack = await this.load(repo, release);
+        if (pack.id !== selection.id) continue;
+        if (selection.digest && pack.digest !== selection.digest)
+          throw new Error("Pinned scenario release changed");
+        if (storage) await storage.put(`scenario:${pack.digest}`, pack);
+        return pack;
+      }
     }
     throw new Error("Scenario release is unavailable");
   }

@@ -9,6 +9,7 @@ import {
   verify,
 } from "node:crypto";
 import { Miniflare } from "miniflare";
+import { publicRequest } from "../../src/package-registry.ts";
 const token = "a".repeat(64);
 const appKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const appPem = appKey.privateKey
@@ -56,23 +57,34 @@ function registryService(
     onGameRepo?: () => void;
     private?: boolean;
     oversizedBody?: boolean;
+    oversizedManifest?: boolean;
+    malformedManifest?: boolean;
+    badManifestDigest?: boolean;
+    missingManifest?: boolean;
+    forbiddenRest?: boolean;
+    packageOverrides?: (typeof packages)[number][];
     metrics?: {
       appTokenRequests: number;
       appJwtRequests: number;
       authHeaders: number;
       cdnDownloads: number;
       assetApiDownloads: number;
+      apiRequests?: number;
+      manifestDownloads?: number;
     };
   } = {},
 ) {
   const repo = options.repo ?? "rkkautsar/forum-scenario";
+  const repoPackages = options.packageOverrides ?? packages;
   const assetIds = new Map([
-    [100, packages[0]],
-    [101, packages[1]],
+    [100, repoPackages[0]],
+    [101, repoPackages[1]],
   ]);
   return async (request: any) => {
     const url = new URL(request.url),
       path = decodeURIComponent(url.pathname);
+    if (options.metrics && url.hostname === "api.github.com")
+      options.metrics.apiRequests = (options.metrics.apiRequests ?? 0) + 1;
     if (options.metrics && request.headers.get("authorization"))
       options.metrics.authHeaders++;
     if (path === "/repos/owner/game" && request.method === "GET") {
@@ -90,6 +102,47 @@ function registryService(
       ) as any;
     if (options.offline?.() && path.startsWith(`/repos/${repo}/`))
       return new Response("registry offline", { status: 503 }) as any;
+    if (
+      options.forbiddenRest &&
+      url.hostname === "api.github.com" &&
+      path.startsWith(`/repos/${repo}`)
+    )
+      return Response.json(
+        { message: "Forbidden" },
+        { status: 403, headers: { "x-ratelimit-remaining": "0" } },
+      ) as any;
+    const latestManifest =
+      path === `/${repo}/releases/latest/download/scenario-manifest.json`;
+    const versionManifest = new RegExp(
+      `^/${repo.replaceAll("/", "\\/")}/releases/download/v(\\d+\\.\\d+\\.\\d+)/scenario-manifest\\.json$`,
+    ).exec(path);
+    if ((latestManifest || versionManifest) && request.method === "GET") {
+      if (options.metrics)
+        options.metrics.manifestDownloads =
+          (options.metrics.manifestDownloads ?? 0) + 1;
+      if (
+        versionManifest &&
+        !repoPackages.some((pack) => pack.version === versionManifest[1])
+      )
+        return new Response("Not found", { status: 404 }) as any;
+      if (options.private || options.missingManifest)
+        return new Response("Not found", { status: 404 }) as any;
+      if (options.oversizedManifest)
+        return new Response(new Uint8Array(16001)) as any;
+      if (options.malformedManifest)
+        return Response.json({ schema: 1, id: "bad" }) as any;
+      const pack =
+        latestManifest || versionManifest?.[1] === repoPackages[1].version
+          ? repoPackages[1]
+          : repoPackages[0];
+      return Response.json({
+        schema: 1,
+        id: pack.id,
+        version: pack.version,
+        digest: options.badManifestDigest ? "0".repeat(64) : pack.digest,
+        asset: "scenario.json",
+      }) as any;
+    }
     if (path === `/repos/${repo}` && request.method === "GET") {
       if (options.private)
         return Response.json({ message: "Not found" }, { status: 404 }) as any;
@@ -113,8 +166,8 @@ function registryService(
         );
       return Response.json([
         {
-          tag_name: "v0.1.1",
-          body: `Scenario SHA-256: ${packages[1].digest}`,
+          tag_name: `v${repoPackages[1].version}`,
+          body: `Scenario SHA-256: ${repoPackages[1].digest}`,
           draft: false,
           prerelease: false,
           assets: options.missingAsset
@@ -122,8 +175,8 @@ function registryService(
             : [{ id: 101, name: "scenario.json", size: 1000 }],
         },
         {
-          tag_name: "v0.1.0",
-          body: `Scenario SHA-256: ${packages[0].digest}`,
+          tag_name: `v${repoPackages[0].version}`,
+          body: `Scenario SHA-256: ${repoPackages[0].digest}`,
           draft: false,
           prerelease: false,
           assets: [{ id: 100, name: "scenario.json", size: 1000 }],
@@ -131,7 +184,7 @@ function registryService(
       ]) as any;
     }
     const download = new RegExp(
-      `^/${repo.replaceAll("/", "\\/")}/releases/download/v(0\\.1\\.[01])/scenario\\.json$`,
+      `^/${repo.replaceAll("/", "\\/")}/releases/download/v(\\d+\\.\\d+\\.\\d+)/scenario\\.json$`,
     ).exec(path);
     if (download && request.method === "GET") {
       if (options.metrics) options.metrics.cdnDownloads++;
@@ -143,7 +196,9 @@ function registryService(
         return new Response(new Uint8Array(1_900_001), {
           headers: { "content-type": "application/json" },
         }) as any;
-      const pack = packages[download[1] === "0.1.0" ? 0 : 1];
+      const pack = repoPackages.find(
+        (candidate) => candidate.version === download[1],
+      )!;
       const body: any = structuredClone(pack);
       if (options.corrupt && download[1] === "0.1.1")
         body.digest = "0".repeat(64);
@@ -392,10 +447,12 @@ test("public release downloads use anonymous CDN access without App secrets", as
     authHeaders: 0,
     cdnDownloads: 0,
     assetApiDownloads: 0,
+    apiRequests: 0,
+    manifestDownloads: 0,
   };
   const mf = runtime({
     bindings: { GITHUB_APP_ID: "", GITHUB_PRIVATE_KEY: "" },
-    outboundService: registryService({ metrics }),
+    outboundService: registryService({ metrics, forbiddenRest: true }),
   });
   try {
     const response = await mf.dispatchFetch("https://app/api/scenarios");
@@ -407,9 +464,108 @@ test("public release downloads use anonymous CDN access without App secrets", as
     assert.equal(metrics.authHeaders, 0);
     assert.equal(metrics.cdnDownloads, 1);
     assert.equal(metrics.assetApiDownloads, 0);
+    assert.equal(metrics.apiRequests, 0);
+    assert.equal(metrics.manifestDownloads, 1);
   } finally {
     await mf.dispose();
   }
+});
+
+test("pinned and digest lookups load public release manifests without REST", async () => {
+  for (const path of [
+    "/scenarios/forum/0.1.0/preview",
+    `/portraits/${packages[1].digest}/maya.svg`,
+  ]) {
+    const metrics = {
+      appTokenRequests: 0,
+      appJwtRequests: 0,
+      authHeaders: 0,
+      cdnDownloads: 0,
+      assetApiDownloads: 0,
+      apiRequests: 0,
+      manifestDownloads: 0,
+    };
+    const mf = runtime({
+      bindings: { GITHUB_APP_ID: "", GITHUB_PRIVATE_KEY: "" },
+      outboundService: registryService({ metrics, forbiddenRest: true }),
+    });
+    try {
+      const response = await mf.dispatchFetch(`https://app${path}`);
+      assert.equal(response.status, 200);
+      assert.equal(metrics.apiRequests, 0);
+      assert.equal(metrics.manifestDownloads, 1);
+      assert.equal(metrics.assetApiDownloads, 0);
+    } finally {
+      await mf.dispose();
+    }
+  }
+});
+
+test("public manifests fail closed on invalid or oversized metadata", async () => {
+  for (const options of [
+    { malformedManifest: true },
+    { oversizedManifest: true },
+    { badManifestDigest: true },
+  ]) {
+    const mf = runtime({
+      bindings: { GITHUB_APP_ID: "", GITHUB_PRIVATE_KEY: "" },
+      outboundService: registryService(options),
+    });
+    try {
+      assert.equal(
+        (await mf.dispatchFetch("https://app/api/scenarios")).status,
+        503,
+      );
+    } finally {
+      await mf.dispose();
+    }
+  }
+});
+
+test("public source rejection diagnostics expose only a safe reason", async () => {
+  const messages: string[] = [];
+  const original = console.info;
+  console.info = (message?: unknown) => messages.push(String(message));
+  try {
+    await publicRequest(
+      "https://api.github.com/repos/example/source",
+      undefined,
+      null,
+      async () =>
+        new Response("private response body", {
+          status: 403,
+          headers: {
+            "x-ratelimit-remaining": "0",
+            authorization: "secret-token",
+          },
+        }),
+    );
+    await publicRequest(
+      "https://api.github.com/repos/example/source",
+      undefined,
+      null,
+      async () => new Response("private response body", { status: 403 }),
+    );
+  } finally {
+    console.info = original;
+  }
+  assert.deepEqual(
+    messages.map((message) => JSON.parse(message)),
+    [
+      {
+        component: "http",
+        event: "scenario_source_rejected",
+        reason: "rate_limited",
+      },
+      {
+        component: "http",
+        event: "scenario_source_rejected",
+        reason: "forbidden",
+      },
+    ],
+  );
+  assert.equal(messages.join(" ").includes("secret-token"), false);
+  assert.equal(messages.join(" ").includes("private response body"), false);
 });
 
 test("private source repositories fall back to App-authenticated asset downloads", async () => {
@@ -432,6 +588,86 @@ test("private source repositories fall back to App-authenticated asset downloads
     assert.equal(metrics.assetApiDownloads, 1);
   } finally {
     await mf.dispose();
+  }
+});
+
+test("mixed public and private sources keep public REST out of pinned fallback", async () => {
+  const publicRepo = "rkkautsar/public-fixture";
+  const privateRepo = "rkkautsar/private-fixture";
+  const { digest: oldDigest, ...privateContent } = structuredClone(packages[1]);
+  void oldDigest;
+  privateContent.id = "private-forum";
+  privateContent.version = "1.0.0";
+  const privatePack = {
+    ...privateContent,
+    digest: createHash("sha256")
+      .update(JSON.stringify(privateContent))
+      .digest("hex"),
+  };
+  const publicMetrics = {
+    appTokenRequests: 0,
+    appJwtRequests: 0,
+    authHeaders: 0,
+    cdnDownloads: 0,
+    assetApiDownloads: 0,
+    apiRequests: 0,
+    manifestDownloads: 0,
+  };
+  const privateMetrics = {
+    appTokenRequests: 0,
+    appJwtRequests: 0,
+    authHeaders: 0,
+    cdnDownloads: 0,
+    assetApiDownloads: 0,
+    apiRequests: 0,
+    manifestDownloads: 0,
+  };
+  const publicSource = registryService({
+    repo: publicRepo,
+    metrics: publicMetrics,
+    forbiddenRest: true,
+  });
+  const privateSource = registryService({
+    repo: privateRepo,
+    private: true,
+    metrics: privateMetrics,
+    packageOverrides: [packages[0], privatePack],
+  });
+  const createRuntime = () =>
+    runtime({
+      bindings: { SCENARIO_REPOSITORIES: `${publicRepo},${privateRepo}` },
+      outboundService: (request: any) => {
+        const path = new URL(request.url).pathname;
+        return path.includes(privateRepo) ||
+          path.startsWith("/app/installations/")
+          ? privateSource(request)
+          : publicSource(request);
+      },
+    });
+  const mf = createRuntime();
+  try {
+    const catalog = await mf.dispatchFetch("https://app/api/scenarios");
+    assert.equal(catalog.status, 200);
+    assert.deepEqual(
+      ((await catalog.json()) as any[]).map((scenario) => scenario.id).sort(),
+      ["forum", "private-forum"],
+    );
+  } finally {
+    await mf.dispose();
+  }
+  privateMetrics.apiRequests = 0;
+  privateMetrics.assetApiDownloads = 0;
+  const coldPinned = createRuntime();
+  try {
+    const preview = await coldPinned.dispatchFetch(
+      "https://app/scenarios/private-forum/1.0.0/preview",
+    );
+    assert.equal(preview.status, 200);
+    assert.equal(publicMetrics.apiRequests, 0);
+    assert.ok(privateMetrics.apiRequests > 0);
+    assert.equal(privateMetrics.assetApiDownloads, 1);
+  } finally {
+    await coldPinned.dispose();
   }
 });
 
@@ -550,7 +786,7 @@ test("slow package lookup finishes before the seed alarm and the run survives a 
 test("invalid release digest and missing assets fail closed without leaking package data", async () => {
   for (const [index, options] of [
     { corrupt: true },
-    { missingAsset: true },
+    { missingAsset: true, missingManifest: true },
   ].entries()) {
     const repo = `rkkautsar/forum-test-${index}`;
     const mf = runtime({
