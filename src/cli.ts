@@ -109,10 +109,8 @@ async function main() {
       if (run.phase === "seeding") await game.seed(run);
       else if (run.phase === "finishing")
         await game.publish(run, await game.connect(run));
-      else
-        throw new Error(
-          "Only interrupted setup/publication can resume; paused runs require inspection and a fresh repository",
-        );
+      else if (run.phase === "paused") await game.resume(run);
+      else throw new Error("Run is not interrupted");
     } else if (cmd === "status") {
       console.log(JSON.stringify(store.all(), null, 2));
     } else if (cmd === "retry-deliveries") {

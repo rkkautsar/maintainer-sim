@@ -51,7 +51,7 @@ export function server(store: Store, game: Game, secret: string) {
   // Periodic reconciliation recovers missed webhooks; synthetic IDs are stable per minute.
   const reconcile = setInterval(() => {
     for (const r of store.all())
-      if (r.phase === "active" || r.phase === "finishing")
+      if (["active", "finishing", "paused"].includes(r.phase))
         store.enqueue(
           "reconcile:" + r.id + ":" + Math.floor(Date.now() / 60000),
           "push",

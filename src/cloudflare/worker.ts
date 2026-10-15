@@ -285,7 +285,7 @@ export class GameSession extends DurableObject<Env> {
         }
       } else {
         for (const r of this.store.all())
-          if (r.phase === "active" || r.phase === "finishing")
+          if (["active", "finishing", "paused"].includes(r.phase))
             this.store.enqueue(
               "reconcile:" + r.id + ":" + Math.floor(Date.now() / 600000),
               "push",
@@ -308,7 +308,7 @@ export class GameSession extends DurableObject<Env> {
       else if (
         this.store
           .all()
-          .some((r) => r.phase === "active" || r.phase === "finishing")
+          .some((r) => ["active", "finishing", "paused"].includes(r.phase))
       )
         await this.ctx.storage.setAlarm(Date.now() + 600000);
     }

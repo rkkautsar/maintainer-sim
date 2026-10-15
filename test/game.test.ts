@@ -101,8 +101,10 @@ class Fake {
     pr.merged = true;
     pr.state = "closed";
     r.prs[id].outcome = "merged";
+    const sha = "merged" + ++this.commits;
     this.files.final = expectedFiles(r);
-    this.refs.main = "final";
+    this.files[sha] = this.files.final;
+    this.refs.main = sha;
   }
 }
 async function setup() {
@@ -199,14 +201,22 @@ test("closing every scenario PR finishes automatically", async () => {
     s.close();
   }
 });
-test("unexpected source changes pause without scoring", async () => {
+test("unexpected source changes still allow finishing with partial assessment", async () => {
   const { s, fake, game, r } = await setup();
   try {
     fake.files.bad = { ...baseline, "evil.ts": "unexpected" };
     fake.refs.main = "bad";
     await game.process("push", payload(r));
-    assert.equal(s.get("run").phase, "paused");
-    assert.equal(s.get("run").result, undefined);
+    assert.equal(s.get("run").phase, "active");
+    await game.process("issue_comment", payload(r, "/game finish"));
+    assert.equal(s.get("run").phase, "finished");
+    assert.equal(s.get("run").result?.success, null);
+    assert.deepEqual(s.get("run").result?.unverified, [
+      "likes",
+      "edit",
+      "page",
+    ]);
+    assert.ok(fake.comments.some((c) => c.body.includes("partially assessed")));
   } finally {
     s.close();
   }
@@ -464,7 +474,7 @@ test("existing run pins its validated baseline across template changes", async (
     s.close();
   }
 });
-test("resume verifies content and refuses unsupported edits", async () => {
+test("legacy paused runs resume with partial scoring for unsupported edits", async () => {
   const { s, fake, game, r } = await setup();
   try {
     r.phase = "paused";
@@ -472,10 +482,8 @@ test("resume verifies content and refuses unsupported edits", async () => {
     s.save(r);
     fake.files.changed = { ...fake.files.baseline, "unexpected.ts": "bad" };
     fake.refs.main = "changed";
-    await assert.rejects(game.resume(r), /Unexpected default-branch/);
-    assert.equal(s.get(r.id).phase, "paused");
-    fake.refs.main = "baseline";
     await game.resume(r);
+    assert.deepEqual(s.get(r.id).unverifiedIssues, ["likes", "edit", "page"]);
     assert.equal(s.get(r.id).phase, "active");
     assert.equal(s.get(r.id).reason, undefined);
     await assert.rejects(game.resume(r), /Only paused/);
@@ -504,6 +512,176 @@ test("a merge during reconciliation retries instead of pausing the run", async (
     await game.process("push", payload(r));
     assert.equal(s.get(r.id).phase, "active");
     assert.equal(s.get(r.id).prs.a.outcome, "merged");
+  } finally {
+    s.close();
+  }
+});
+
+test("edited PR is unscored, not judged or overwritten, and stage finishes once", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    let judgeCalls = 0;
+    game.judgeEnabled = true;
+    game.reviewer = {
+      evaluate: async () => {
+        judgeCalls++;
+        return "identified";
+      },
+    };
+    const pr = fake.prs.find((p) => p.number === r.prs.c.number);
+    pr.head.sha = "external-edit";
+    fake.files[pr.head.sha] = {
+      ...baseline,
+      "src/edit.ts": "custom implementation",
+    };
+    fake.reviews = [
+      {
+        user: { id: r.player },
+        id: 99,
+        state: "CHANGES_REQUESTED",
+        submitted_at: "2026-10-15",
+        commit_id: pr.head.sha,
+        body: "Check ownership",
+      },
+    ];
+    await game.process(
+      "issue_comment",
+      payload(r, `/game revise ${pr.number}`),
+    );
+    assert.equal(s.get(r.id).phase, "active");
+    assert.ok(s.get(r.id).prs.c.unscored);
+    assert.equal(fake.refs[`game/${r.id}/c`], r.prs.c.head);
+    assert.equal(s.get(r.id).prs.c.revision, 0);
+    assert.equal(judgeCalls, 0);
+    pr.merged = true;
+    pr.state = "closed";
+    fake.refs.main = pr.head.sha;
+    for (const other of fake.prs) other.state = "closed";
+    await game.process("pull_request", payload(r));
+    await game.process("pull_request", payload(r));
+    const result = s.get(r.id).result!;
+    assert.equal(s.get(r.id).phase, "finished");
+    assert.equal(result.decisions.find((d) => d.id === "c")?.points, null);
+    assert.equal(result.maximum, 10);
+    assert.equal(result.success, null);
+    assert.ok(result.unverified?.includes("edit"));
+    assert.equal(
+      fake.comments.filter((c) => c.body.includes("Stage debrief")).length,
+      1,
+    );
+  } finally {
+    s.close();
+  }
+});
+test("both competing merges finish with unscored alternatives, not a pause", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    fake.merge("a", r);
+    fake.merge("b", r);
+    for (const pr of fake.prs) pr.state = "closed";
+    await game.process("pull_request", payload(r));
+    const result = s.get(r.id).result!;
+    assert.equal(s.get(r.id).phase, "finished");
+    assert.equal(result.success, null);
+    assert.ok(result.unverified?.includes("likes"));
+    assert.equal(result.decisions.find((d) => d.id === "a")?.points, null);
+    assert.equal(result.decisions.find((d) => d.id === "b")?.points, null);
+    assert.equal(result.maximum, 8);
+  } finally {
+    s.close();
+  }
+});
+test("documentation changes do not invalidate known milestone contributions", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    fake.merge("a", r);
+    fake.files.final["README.md"] = "Player notes";
+    await game.process("push", payload(r));
+    const current = s.get(r.id);
+    assert.equal(current.phase, "active");
+    assert.equal(current.prs.a.unscored, undefined);
+    assert.deepEqual(current.unverifiedIssues, []);
+    assert.ok(current.warnings?.length);
+  } finally {
+    s.close();
+  }
+});
+test("API failures retry without changing the game phase", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    const get = fake.get.bind(fake);
+    fake.get = async () => {
+      throw Object.assign(new Error("unavailable"), { status: 503 });
+    };
+    await assert.rejects(game.process("push", payload(r)), /unavailable/);
+    assert.equal(s.get(r.id).phase, "active");
+    fake.get = get;
+    await game.process("push", payload(r));
+    assert.equal(s.get(r.id).phase, "active");
+  } finally {
+    s.close();
+  }
+});
+test("repository access restoration resumes processing and preserves finished results", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    await game.process("installation_repositories", {
+      installation: { id: 1 },
+      action: "removed",
+      repositories_removed: [{ id: 2 }],
+    });
+    assert.equal(s.get(r.id).phase, "inaccessible");
+    await game.process("installation_repositories", {
+      installation: { id: 1 },
+      action: "added",
+      repositories_added: [{ id: 2 }],
+    });
+    assert.equal(s.get(r.id).phase, "active");
+    await game.process("issue_comment", payload(r, "/game finish"));
+    const result = s.get(r.id).result;
+    await game.process("installation", {
+      installation: { id: 1 },
+      action: "deleted",
+    });
+    assert.equal(s.get(r.id).phase, "finished");
+    assert.deepEqual(s.get(r.id).result, result);
+  } finally {
+    s.close();
+  }
+});
+test("older paused runs automatically recover on the next delivery", async () => {
+  const { s, game, r } = await setup();
+  try {
+    r.phase = "paused";
+    r.reason = "Old content check";
+    s.save(r);
+    await game.process("issue_comment", payload(r, "/game finish"));
+    assert.equal(s.get(r.id).phase, "finished");
+    assert.equal(s.get(r.id).reason, undefined);
+  } finally {
+    s.close();
+  }
+});
+
+test("repository comparison limits produce a partial debrief without blocking finish", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    fake.merge("a", r);
+    fake.tree = async () => {
+      throw new Error("Unsupported file type");
+    };
+    for (const pr of fake.prs) pr.state = "closed";
+    await game.process("push", payload(r));
+    const finished = s.get(r.id);
+    assert.equal(finished.phase, "finished");
+    assert.equal(finished.result?.success, null);
+    assert.equal(
+      finished.result?.decisions.find((d) => d.id === "a")?.points,
+      null,
+    );
+    assert.ok(
+      finished.result?.warnings?.some((w) => w.includes("exercise limits")),
+    );
   } finally {
     s.close();
   }

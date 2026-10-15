@@ -34,7 +34,7 @@ npm run cli -- export-template /tmp/pocket-board-template
 
 Initialize that exported directory as a separate Git repository and push it to a disposable player-owned repository. You can mark it as a GitHub template for subsequent players, or fork it. Its root must exactly match the export. Start with no previous issues or PRs (including deleted ones), so Game Master receives #1. Do not copy this game-master repository: `src/scenario.ts` contains the hidden rubric and prepared answers.
 
-GitHub Actions may remain enabled. The current template has no workflows; future authored CI should run tests/lint with read-only permissions and no secrets. Unexpected workflow changes are rejected by the existing exact-content checks. Avoid rulesets that prevent App branch creation or player merges. The prototype does not bypass protections. Each new stage/run uses a fresh repository so previous work is preserved.
+GitHub Actions may remain enabled. The current template has no workflows; future authored CI should run tests/lint with read-only permissions and no secrets. The App never executes repository workflows or supplies them with credentials; unsupported code/workflow changes can make parts of the assessment unavailable. Avoid rulesets that prevent App branch creation or player merges. The prototype does not bypass protections. Each new stage/run uses a fresh repository so previous work is preserved.
 
 ## Register the GitHub App
 
@@ -77,7 +77,7 @@ Review the six PRs in GitHub. Issue #1 introduces the Saturday launch, contribut
 
 Only the designated player's commands and reviews are accepted. A review approval is not a merge. Answers and the authored debrief appear at stage finish. Open community improvements can be deferred; missing milestone implementations remain incomplete.
 
-Editing PR branches, changing the baseline, merging both competing implementations, or reverting authored changes pauses scoring. The App preserves work and posts a pause notice. Each run pins its initial file content, so later template updates do not invalidate it. An operator can run `npm run cf:cli -- resume INSTALLATION REPOSITORY` to resume a paused hosted run only after its branches and merged content pass reconciliation. Unsupported changes still prevent resume. For a replay, create a fresh repository; there is no destructive reset command.
+The game continues when repository content differs from the prepared scenario. Edited PRs, collaborator merges, and competing implementations are marked unscored where the rubric no longer applies. Unverified milestone requirements are reported separately, and excluded decisions do not count toward the available points. Unrelated documentation changes produce a note. Automatic revisions never overwrite an edited branch. Temporary API failures and changing snapshots retry automatically; removing App access stops processing until access is restored. Older paused runs recover on their next reconciliation. Each run pins its starting baseline. For a replay, create a fresh repository; there is no destructive reset command.
 
 ## Optional Jev
 
@@ -108,7 +108,7 @@ Transient GitHub failures retry at bounded exponential intervals (five attempts)
 npm run cli -- retry-deliveries
 ```
 
-Interrupted revision publication records the intended commit before updating GitHub; retry reconciles that intent. Interrupted result publication resumes on service startup and finds the existing marked bot comment. GitHub writes cannot be fully transactional: external concurrent edits detected during reconciliation pause the run. Closing/reopening a PR after the final debrief does not alter its frozen result.
+Interrupted revision publication records the intended commit before updating GitHub; retry reconciles that intent. Interrupted result publication resumes on service startup and finds the existing marked bot comment. GitHub writes cannot be fully transactional: changing snapshots retry, while stable unsupported edits produce partial assessments. Closing/reopening a PR after the final debrief does not alter its frozen result.
 
 ## Boundaries and validation
 

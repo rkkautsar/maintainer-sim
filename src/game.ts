@@ -198,20 +198,25 @@ export class Game {
     await this.pinBaseline(r, gh);
     const root = this.root(r),
       snapshot: Record<string, any> = {};
+    r.warnings = [];
+    r.unverifiedIssues = [];
     const before = (await gh.get(root + "/git/ref/heads/" + r.base)).object.sha;
     for (const p of proposals) {
       const state = r.prs[p.id],
         pr = await gh.get(root + "/pulls/" + state.number);
       snapshot[p.id] = pr;
+      delete state.unscored;
       if (
         pr.head.sha !== state.head ||
         pr.base.ref !== r.base ||
         pr.head.repo?.id !== r.repository
       )
-        throw new Error("Unexpected PR head or target");
+        state.unscored =
+          "The PR branch or target differs from its prepared revision.";
       // Seeded/prepared commit IDs are immutable and their content was authored here.
       if (pr.merged_by && pr.merged_by.id !== r.player)
-        throw new Error("Unexpected collaborator merge");
+        state.unscored =
+          "Another collaborator merged this PR; the player decision was not assessed.";
       state.outcome = pr.merged
         ? "merged"
         : pr.state === "closed"
@@ -235,21 +240,42 @@ export class Game {
           submitted: x.submitted_at,
         }));
     }
-    const groups = new Set<string>();
+    const groups = new Map<string, string[]>();
     for (const p of proposals) {
-      if (r.prs[p.id].outcome === "merged" && p.group) {
-        if (groups.has(p.group))
-          throw new Error("Both competing implementations merged");
-        groups.add(p.group);
-      }
+      if (r.prs[p.id].outcome === "merged" && p.group)
+        groups.set(p.group, [...(groups.get(p.group) ?? []), p.id]);
     }
+    for (const ids of groups.values())
+      if (ids.length > 1)
+        for (const id of ids)
+          r.prs[id].unscored =
+            "Both competing implementations were merged; their combined behavior is not covered by the rubric.";
     const expected = expectedFiles(r);
     const hash = createHash("sha256")
       .update(JSON.stringify(Object.entries(expected).sort()))
       .digest("hex");
-    const mismatch =
-      (before !== r.tree || hash !== r.contentHash) &&
-      !equal(await gh.tree(root, before), expected);
+    let files: Record<string, string> | undefined;
+    try {
+      files =
+        before === r.tree && r.observedFiles
+          ? r.observedFiles
+          : await gh.tree(root, before);
+    } catch (error: any) {
+      if (
+        !/^(Unsupported file type|Unsupported truncated tree|Oversized file)$/.test(
+          error.message,
+        )
+      )
+        throw error;
+      r.warnings.push(
+        "Repository content could not be compared within the exercise limits.",
+      );
+      for (const p of proposals)
+        if (r.prs[p.id].outcome === "merged")
+          r.prs[p.id].unscored =
+            "Merged content could not be verified within the exercise limits.";
+      r.unverifiedIssues = issues.map((i) => i.id);
+    }
     const after = (await gh.get(root + "/git/ref/heads/" + r.base)).object.sha;
     if (before !== after)
       throw new SnapshotChanged("Repository changed during assessment");
@@ -262,8 +288,42 @@ export class Game {
       )
         throw new SnapshotChanged("PR changed during assessment");
     }
-    if (mismatch)
-      throw new Error("Unexpected default-branch edits or reversion");
+    if (files) {
+      const changed = [
+        ...new Set([...Object.keys(files), ...Object.keys(expected)]),
+      ].filter((path) => files![path] !== expected[path]);
+      if (changed.length)
+        r.warnings.push(
+          "Default-branch changes outside the prepared contributions were detected.",
+        );
+      for (const path of changed) {
+        const owners = proposals.filter(
+          (p) => path in variant(p.id, r.prs[p.id].revision).files,
+        );
+        for (const p of owners) {
+          if (p.issue) r.unverifiedIssues.push(p.issue);
+          if (r.prs[p.id].outcome === "merged")
+            r.prs[p.id].unscored =
+              "The resulting file differs from the prepared contribution.";
+        }
+        // Shared code/configuration can affect every feature. Documentation alone cannot.
+        if (!owners.length && !/\.(md|txt)$/.test(path) && path !== "LICENSE") {
+          r.unverifiedIssues.push(...issues.map((i) => i.id));
+          for (const p of proposals)
+            if (r.prs[p.id].outcome === "merged")
+              r.prs[p.id].unscored =
+                "Changes outside the prepared contributions may affect the merged behavior.";
+        }
+      }
+    }
+    for (const p of proposals)
+      if (r.prs[p.id].unscored) {
+        r.warnings.push(`PR #${r.prs[p.id].number}: ${r.prs[p.id].unscored}`);
+        if (p.issue && r.prs[p.id].outcome === "merged")
+          r.unverifiedIssues.push(p.issue);
+      }
+    r.unverifiedIssues = [...new Set(r.unverifiedIssues)];
+    r.observedFiles = files;
     r.tree = before;
     r.contentHash = hash;
     this.store.save(r);
@@ -304,6 +364,17 @@ export class Game {
     if (!p) throw new Error("Not a scenario PR");
     const state = r.prs[p.id];
     if (state.outcome !== "open") return;
+    if (state.unscored) {
+      await this.notice(
+        r,
+        gh,
+        "revision-skipped-" + p.id,
+        "The branch for PR #" +
+          number +
+          " differs from the prepared exercise. Automatic revisions are unavailable for it, but you can still merge, close, or finish the stage. Its assessment will be marked unscored.",
+      );
+      return;
+    }
     const next = p.variants[state.revision + 1];
     if (!next) {
       await this.notice(
@@ -365,8 +436,10 @@ export class Game {
       const branch = `game/${r.id}/${intent.id}`,
         root = this.root(r),
         head = (await gh.get(root + "/git/ref/heads/" + branch)).object.sha;
-      if (head !== intent.head && head !== intent.old)
-        throw new Error("Unexpected revision branch");
+      if (head !== intent.head && head !== intent.old) {
+        this.store.db.prepare("DELETE FROM deliveries WHERE id=?").run(row.id);
+        continue; // Preserve external edits; reconcile marks this PR unscored.
+      }
       if (head === intent.old)
         await gh.patch(root + "/git/refs/heads/" + branch, {
           sha: intent.head,
@@ -406,13 +479,32 @@ export class Game {
         (event === "installation_repositories" &&
           payload.repositories_removed?.some((x: any) => x.id === r.repository))
       ) {
+        if (["finished", "inaccessible"].includes(r.phase)) continue;
+        r.phaseBeforeAccessLoss = r.phase;
         r.phase = "inaccessible";
         this.store.save(r);
         continue;
       }
+      const accessRestored =
+        (event === "installation" &&
+          ["created", "unsuspend"].includes(payload.action)) ||
+        (event === "installation_repositories" &&
+          payload.action === "added" &&
+          payload.repositories_added?.some((x: any) => x.id === r.repository));
+      if (r.phase === "inaccessible" && accessRestored) {
+        r.phase = r.phaseBeforeAccessLoss ?? "active";
+        delete r.phaseBeforeAccessLoss;
+        this.store.save(r);
+      }
+      // Migrate older paused runs on their next delivery/reconciliation.
+      if (r.phase === "paused") {
+        r.phase = "active";
+        delete r.reason;
+        this.store.save(r);
+      }
       if (
         payload.repository?.id !== r.repository ||
-        ["finished", "paused", "inaccessible", "seeding"].includes(r.phase)
+        ["finished", "inaccessible", "seeding"].includes(r.phase)
       )
         continue;
       const gh = await this.connect(r);
@@ -420,99 +512,78 @@ export class Game {
         await this.publish(r, gh);
         continue;
       }
-      try {
-        await this.recoverRevision(r, gh);
-        await this.humanTouches(r, gh);
-        await this.reconcile(r, gh);
-        const cmd =
-          event === "issue_comment" &&
-          payload.action === "created" &&
-          payload.issue?.number === r.master &&
-          payload.comment?.user?.id === r.player
-            ? command(payload.comment.body)
-            : undefined;
-        const judge = this.reviewer;
-        for (const p of proposals) {
-          if (!this.judgeEnabled) break;
-          const state = r.prs[p.id],
-            v = variant(p.id, state.revision);
-          if (!v.concern) continue;
-          const review = state.reviews
-            .filter((x) => x.commit === state.head)
-            .at(-1);
-          if (!review) continue;
-          const inline = await gh.list(
-            this.root(r) + "/pulls/" + state.number + "/comments",
-          );
-          const text =
-            review.body +
-            "\n" +
-            inline
-              .filter(
-                (x) =>
-                  x.user?.id === r.player &&
-                  x.pull_request_review_id === review.id,
-              )
-              .map((x) => x.body)
-              .join("\n");
-          const category = await judge.evaluate(text, v.concern, v.files);
-          if (category) {
-            r.findings[p.id] ??= [];
-            if (!r.findings[p.id].some((f) => f.reviewId === review.id))
-              r.findings[p.id].push({
-                reviewId: review.id,
-                category,
-                revision: state.revision,
-                reviewText: text.slice(0, 1000),
-              });
-            this.store.save(r);
-          }
-          if (
-            cmd?.kind !== "finish" &&
-            review.state === "CHANGES_REQUESTED" &&
-            state.outcome === "open" &&
-            (category === "identified" || category === "consequence")
-          )
-            await this.revise(r, state.number, gh);
-        }
-        if (cmd?.kind === "revise") {
-          if (proposals.some((p) => r.prs[p.id].number === cmd.number))
-            await this.revise(r, cmd.number, gh);
-          else
-            await this.notice(
-              r,
-              gh,
-              "unknown-pr",
-              "Use /game revise with a scenario PR number.",
-            );
-        }
-        if (
-          cmd?.kind === "finish" ||
-          proposals.every((p) => r.prs[p.id].outcome !== "open")
-        ) {
-          await this.reconcile(r, gh);
-          r.finishEarly = cmd?.kind === "finish";
-          await this.finish(r, gh);
-        }
-      } catch (e: any) {
-        if (
-          e instanceof SnapshotChanged ||
-          e.status === 403 ||
-          e.status === 429 ||
-          e.status >= 500 ||
-          e.name === "HttpError" ||
-          e.name === "TypeError"
-        )
-          throw e;
-        r.phase = "paused";
-        r.reason = e.message;
-        this.store.save(r);
-        await this.notice(
-          r,
-          gh,
-          "paused",
-          "Assessment paused because the repository no longer matches a supported scenario state. Your work is preserved. Ask the operator to inspect the run and restart in a fresh repository.",
+      await this.recoverRevision(r, gh);
+      await this.humanTouches(r, gh);
+      await this.reconcile(r, gh);
+      const cmd =
+        event === "issue_comment" &&
+        payload.action === "created" &&
+        payload.issue?.number === r.master &&
+        payload.comment?.user?.id === r.player
+          ? command(payload.comment.body)
+          : undefined;
+      const judge = this.reviewer;
+      for (const p of proposals) {
+        if (!this.judgeEnabled) break;
+        const state = r.prs[p.id],
+          v = variant(p.id, state.revision);
+        if (!v.concern || state.unscored) continue;
+        const review = state.reviews
+          .filter((x) => x.commit === state.head)
+          .at(-1);
+        if (!review) continue;
+        const inline = await gh.list(
+          this.root(r) + "/pulls/" + state.number + "/comments",
         );
+        const text =
+          review.body +
+          "\n" +
+          inline
+            .filter(
+              (x) =>
+                x.user?.id === r.player &&
+                x.pull_request_review_id === review.id,
+            )
+            .map((x) => x.body)
+            .join("\n");
+        const category = await judge.evaluate(text, v.concern, v.files);
+        if (category) {
+          r.findings[p.id] ??= [];
+          if (!r.findings[p.id].some((f) => f.reviewId === review.id))
+            r.findings[p.id].push({
+              reviewId: review.id,
+              category,
+              revision: state.revision,
+              reviewText: text.slice(0, 1000),
+            });
+          this.store.save(r);
+        }
+        if (
+          cmd?.kind !== "finish" &&
+          review.state === "CHANGES_REQUESTED" &&
+          state.outcome === "open" &&
+          (category === "identified" || category === "consequence")
+        )
+          await this.revise(r, state.number, gh);
+      }
+      if (cmd?.kind === "revise") {
+        if (proposals.some((p) => r.prs[p.id].number === cmd.number))
+          await this.revise(r, cmd.number, gh);
+        else
+          await this.notice(
+            r,
+            gh,
+            "unknown-pr",
+            "Use /game revise with a scenario PR number.",
+          );
+      }
+      if (
+        cmd?.kind === "finish" ||
+        proposals.every((p) => r.prs[p.id].outcome !== "open")
+      ) {
+        await this.reconcile(r, gh);
+        r.finishEarly = cmd?.kind === "finish";
+        await this.finish(r, gh);
       }
     }
   }

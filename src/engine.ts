@@ -22,15 +22,19 @@ export function expectedFiles(run: Run): Record<string, string> {
 export function assess(run: Run): Assessment {
   if (!proposals.every((p) => run.prs[p.id]))
     throw new Error("Incomplete scenario");
+  const unverified = run.unverifiedIssues ?? [];
   const complete = issues
-    .filter((issue) =>
-      proposals.some(
-        (p) =>
-          p.issue === issue.id &&
-          run.prs[p.id].outcome === "merged" &&
-          (variant(p.id, run.prs[p.id].revision).satisfiesIssue ??
-            variant(p.id, run.prs[p.id].revision).sound),
-      ),
+    .filter(
+      (issue) =>
+        !unverified.includes(issue.id) &&
+        proposals.some(
+          (p) =>
+            p.issue === issue.id &&
+            !run.prs[p.id].unscored &&
+            run.prs[p.id].outcome === "merged" &&
+            (variant(p.id, run.prs[p.id].revision).satisfiesIssue ??
+              variant(p.id, run.prs[p.id].revision).sound),
+        ),
     )
     .map((i) => i.id);
   const harmful: string[] = [],
@@ -38,10 +42,18 @@ export function assess(run: Run): Assessment {
   const decisions = proposals.map((p) => {
     const state = run.prs[p.id],
       v = variant(p.id, state.revision);
-    if (state.outcome === "merged" && !v.sound) {
+    if (!state.unscored && state.outcome === "merged" && !v.sound) {
       harmful.push(p.id);
       if (v.debt) debt.push(v.debt);
     }
+    const unscored =
+      state.unscored ||
+      (p.issue &&
+      unverified.includes(p.issue) &&
+      v.sound &&
+      state.outcome !== "merged"
+        ? "Whether a sound alternative delivered this issue could not be verified."
+        : undefined);
     let points = 0;
     if (state.outcome === "merged") points = v.sound ? 2 : -2;
     else if (!v.sound) points = 2;
@@ -49,16 +61,21 @@ export function assess(run: Run): Assessment {
     return {
       id: p.id,
       outcome: state.outcome === "open" ? "deferred" : state.outcome,
-      points,
-      explanation: v.explanation,
+      points: unscored ? null : points,
+      explanation: unscored ? "Unscored: " + unscored : v.explanation,
     };
   });
   return {
     complete,
     total: issues.length,
-    points: decisions.reduce((n, d) => n + d.points, 0),
-    maximum: proposals.length * 2,
-    success: complete.length === issues.length && harmful.length === 0,
+    points: decisions.reduce((n, d) => n + (d.points ?? 0), 0),
+    maximum: decisions.filter((d) => d.points !== null).length * 2,
+    success:
+      unverified.length || decisions.some((d) => d.points === null)
+        ? null
+        : complete.length === issues.length && harmful.length === 0,
+    unverified,
+    warnings: run.warnings ?? [],
     harmful,
     debt,
     decisions,
@@ -74,9 +91,11 @@ export function debrief(run: Run): string {
     "",
     storyEnding(r),
     "",
-    `Milestone: ${r.complete.length}/${r.total} requirements satisfied.`,
-    `Decision quality: ${r.points}/${r.maximum}.`,
-    `Stage: ${r.success ? "successful" : "incomplete or unhealthy"}.`,
+    `Milestone: ${r.complete.length}/${r.total} requirements satisfied.${r.unverified?.length ? " Not assessed: " + r.unverified.join(", ") + "." : ""}`,
+    r.maximum
+      ? `Decision quality: ${r.points}/${r.maximum}.`
+      : "Decision quality: not assessed (no scorable decisions).",
+    `Stage: ${r.success === null ? "partially assessed" : r.success ? "successful" : "incomplete or unhealthy"}.`,
     `Accepted concerns: ${r.harmful.length ? r.harmful.join(", ") : "none"}.`,
     `Maintainability debt: ${r.debt.length ? r.debt.join("; ") : "none"}.`,
     "",
@@ -84,10 +103,23 @@ export function debrief(run: Run): string {
     `Review effort: ${Object.values(run.prs).reduce((n, p) => n + p.reviews.length, 0)} submitted reviews (informational).`,
     "",
   ];
+  for (const warning of r.warnings ?? [])
+    lines.push(`Assessment note: ${warning}`);
+  if (r.decisions.some((d) => d.points === null))
+    lines.push(
+      "Unscored decisions are excluded from the available points; a partial score is not a full-stage result.",
+      "",
+    );
   for (const d of r.decisions) {
     const p = proposals.find((p) => p.id === d.id)!,
       state = run.prs[d.id],
       v = variant(d.id, state.revision);
+    if (d.points === null) {
+      lines.push(
+        `- PR ${state.number}: **${d.outcome}** (unscored). ${d.explanation}`,
+      );
+      continue;
+    }
     const recommendation = v.sound
       ? p.issue
         ? "Merge to deliver the issue, or close if a sound alternative already delivered it."
@@ -101,7 +133,9 @@ export function debrief(run: Run): string {
   for (const p of proposals)
     lines.push(`- PR ${run.prs[p.id].number}: ${lessons[p.id]}`);
   lines.push("");
-  for (const [id, findings] of Object.entries(run.findings))
+  for (const [id, findings] of Object.entries(run.findings).filter(
+    ([id]) => !run.prs[id].unscored,
+  ))
     for (const f of findings)
       lines.push(
         `- PR ${run.prs[id].number}, review ${f.reviewId}, revision ${f.revision}: ${f.category}. Expected concern: ${variant(id, f.revision).concern ?? "none"}`,

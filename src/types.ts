@@ -7,6 +7,7 @@ export type PRState = {
   outcome: Outcome;
   head: string;
   reviews: Review[];
+  unscored?: string;
 };
 export type Review = {
   id: number;
@@ -30,8 +31,12 @@ export type Run = {
   player: number;
   phase: Phase;
   reason?: string;
+  phaseBeforeAccessLoss?: Phase;
+  warnings?: string[];
+  unverifiedIssues?: string[];
   baseline?: string;
   baselineFiles?: Record<string, string>;
+  observedFiles?: Record<string, string>;
   base?: string;
   milestone?: number;
   master?: number;
@@ -49,13 +54,15 @@ export type Assessment = {
   total: number;
   points: number;
   maximum: number;
-  success: boolean;
+  success: boolean | null;
+  unverified?: string[];
+  warnings?: string[];
   harmful: string[];
   debt: string[];
   decisions: {
     id: string;
     outcome: string;
-    points: number;
+    points: number | null;
     explanation: string;
   }[];
   reasoning: string;
