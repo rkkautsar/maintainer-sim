@@ -114,7 +114,7 @@ Interrupted revision publication records the intended commit before updating Git
 
 Implemented: deterministic scenario/scoring, prepared revisions, resumable seeding, installation-token authentication, signed durable webhooks, authorization, content reconciliation, early/automatic finish, optional judge with budget/fallback, and local tests.
 
-No live GitHub installation or paid Jev call has been verified yet. Use a disposable repository for the first real walkthrough. All code comparisons use exact authored tree content, so merge/squash/rebase identity does not determine scores. This is a learning game, not anti-cheat: content-equivalent edits and public answer sharing are outside the threat model.
+Live GitHub App installation and automatic seeding have been verified on a disposable playthrough repository. A paid Jev call has not been verified yet. All code comparisons use exact authored tree content, so merge/squash/rebase identity does not determine scores. This is a learning game, not anti-cheat: content-equivalent edits and public answer sharing are outside the threat model.
 
 Never execute player code in the service. The exercise's known source is tested locally during development; runtime assessment reads content only. App/model keys are not embedded in player assets or judge context. Public player repos expose contributions and discussion, so do not use sensitive source.
 

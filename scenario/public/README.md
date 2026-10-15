@@ -2,6 +2,16 @@
 
 A small, runnable neighborhood noticeboard: vanilla browser UI, Node.js API, and SQLite persistence. No package dependencies or external services.
 
+## Play Maintainer Sim
+
+1. Select **Use this template → Create a new repository** on [the template repository](https://github.com/rkkautsar/pocket-board-template). Create it under your own account.
+2. [Install the Maintainer Sim GitHub App](https://github.com/apps/maintainer-sim/installations/new). Choose **Only select repositories**, select your new repository, and install. If the App is already installed, open its **Configure** page and add the new repository to its access list.
+3. Wait for **Game Master issue #1** to appear in your new repository. The App automatically creates the stage milestone, issues, and pull requests. Follow that issue for the story and game instructions.
+
+Start with a fresh repository: leave its files unchanged and avoid creating issues or pull requests until setup finishes. Your role is to review contributions and decide what to merge, close, or request changes on; you do not need to write code. Installing the App on the template itself does not start a game.
+
+## Run Pocket Board locally
+
 Requires Node.js 24 or newer. From this repository:
 
 ```bash
