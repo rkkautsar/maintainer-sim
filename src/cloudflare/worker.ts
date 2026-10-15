@@ -9,7 +9,7 @@ import { Game } from "../game.ts";
 import { GitHub } from "../github.ts";
 import { initialRun } from "../engine.ts";
 import { CloudStore } from "./store.ts";
-import { CloudJudge } from "./budget.ts";
+import { CloudJudge } from "./judge.ts";
 import type { Env } from "./env.ts";
 export { AIBudget } from "./budget.ts";
 const events = new Set([

@@ -18,7 +18,8 @@
     "cf:cli": "node --env-file-if-exists=.env src/cloudflare-cli.ts",
     "test:cf": "npm run cf:check && node --test test/cloudflare/*.test.ts",
     "scenario": "node scripts/scenario.ts",
-    "bundle:packages": "node scripts/bundle-packages.ts"
+    "bundle:packages": "node scripts/bundle-packages.ts",
+    "judge:calibrate": "node scripts/calibrate-judge.ts"
   },
   "dependencies": {
     "@octokit/rest": "^22.0.0",
