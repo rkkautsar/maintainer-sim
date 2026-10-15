@@ -21,9 +21,27 @@ export type ScenarioPackage = {
   characters: Record<string, Character>;
   stages: Stage[];
 };
-export const catalog = () => publishedPackages;
+// Keep old immutable releases available for existing runs, but offer the latest
+// version of each scenario when starting a new playthrough.
+export const catalog = (): ScenarioPackage[] => {
+  const latest = new Map<string, ScenarioPackage>();
+  for (const pack of publishedPackages) {
+    const current = latest.get(pack.id);
+    if (
+      !current ||
+      pack.version.localeCompare(current.version, undefined, {
+        numeric: true,
+      }) > 0
+    )
+      latest.set(pack.id, pack);
+  }
+  return [...latest.values()];
+};
+export const findPackageByDigest = (digest: string) =>
+  publishedPackages.find((p) => p.digest === digest);
+
 export function findPackage(id: string, version?: string): ScenarioPackage {
-  const candidates = publishedPackages.filter(
+  const candidates = (version ? publishedPackages : catalog()).filter(
     (p) => p.id === id && (!version || p.version === version),
   );
   if (candidates.length !== 1)

@@ -1,3 +1,4 @@
+import { findPackage } from "../../src/packages.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, createHash } from "node:crypto";
@@ -288,6 +289,16 @@ test("launch page exposes public catalog only and rejects unauthenticated writes
       await mf.dispatchFetch("https://app/api/scenarios")
     ).json()) as any[];
     assert.equal(catalog[0].id, "forum");
+    assert.equal(catalog[0].version, "0.1.1");
+    assert.equal(catalog.length, 1);
+    for (const version of ["0.1.0", "0.1.1"]) {
+      const pack = findPackage("forum", version);
+      const portrait = await mf.dispatchFetch(
+        `https://app/portraits/${pack.digest}/maya.svg`,
+      );
+      assert.equal(portrait.status, 200, "Portrait retained for " + version);
+      assert.match(portrait.headers.get("content-type") ?? "", /image\/svg/);
+    }
     assert.equal(JSON.stringify(catalog).includes("concern"), false);
     assert.equal(
       (
@@ -335,7 +346,7 @@ test("launch creates one clean player repository and seeds ten package-selected 
       };
     const body = JSON.stringify({
       scenario: "forum",
-      version: "0.1.0",
+      version: "0.1.1",
       name: "sim-forum",
       private: true,
     });
@@ -386,7 +397,7 @@ test("existing repository names are refused without any creation or seeding", as
       headers: { cookie, origin: "https://app", "x-csrf-token": csrf },
       body: JSON.stringify({
         scenario: "forum",
-        version: "0.1.0",
+        version: "0.1.1",
         name: "sim-forum",
         private: true,
       }),
@@ -408,7 +419,7 @@ test("missing installation is actionable before any repository is created", asyn
       headers: { cookie, origin: "https://app", "x-csrf-token": csrf },
       body: JSON.stringify({
         scenario: "forum",
-        version: "0.1.0",
+        version: "0.1.1",
         name: "sim-forum",
         private: true,
       }),
@@ -436,7 +447,7 @@ test("definitive create denial can be retried after permission is corrected", as
       headers,
       body: JSON.stringify({
         scenario: "forum",
-        version: "0.1.0",
+        version: "0.1.1",
         name: "sim-forum",
         private: true,
       }),
@@ -468,7 +479,7 @@ test("a lost creation response recovers the marked repository without duplicate 
       headers,
       body: JSON.stringify({
         scenario: "forum",
-        version: "0.1.0",
+        version: "0.1.1",
         name: "sim-forum",
         private: true,
       }),
@@ -506,7 +517,7 @@ test("daily launch quota cannot be bypassed through retry", async () => {
           headers,
           body: JSON.stringify({
             scenario: "forum",
-            version: "0.1.0",
+            version: "0.1.1",
             name: "sim-forum",
             private: true,
           }),

@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { initialRun, assess, expectedFiles, debrief } from "../src/engine.ts";
+import {
+  initialRun,
+  assess,
+  expectedFiles,
+  debrief,
+  prDebrief,
+} from "../src/engine.ts";
 import { findPackage, selectScenario } from "../src/packages.ts";
 const pack = findPackage("forum", "0.1.0");
 const { baseline, proposals } = pack.stages[0];
@@ -253,5 +259,8 @@ test("coaching never changes any assessment field", () => {
     ],
   };
   assert.deepEqual(assess(r), before);
-  assert.match(debrief(r), /Review coaching \(no score impact\)/);
+  assert.match(
+    prDebrief(r, Object.keys(r.coaching)[0]),
+    /Review coaching \(no score impact\)/,
+  );
 });

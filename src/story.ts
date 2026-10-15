@@ -16,9 +16,6 @@ export function revisionReply(run: Run, id: string): string {
       "I have pushed the prepared revision. Please take another look.")
   );
 }
-export function communityUpdate(run: Run): string {
-  return storyEnding(run.result!, run);
-}
 export function contributorNote(run: Run, id: string) {
   return publicCharacter(
     run,

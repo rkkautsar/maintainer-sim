@@ -34,7 +34,8 @@ class Fake {
   }
   async list(path: string) {
     if (path.includes("/reviews")) return this.reviews;
-    if (path.includes("/comments")) return this.comments;
+    if (path.includes("/comments"))
+      return this.comments.filter((c) => c.path === path);
     if (path.includes("/milestones")) return this.milestones;
     if (path.includes("/issues")) return this.issues;
     if (path.includes("/pulls")) return this.prs;
@@ -83,12 +84,25 @@ class Fake {
       return p;
     }
     if (path.endsWith("/comments")) {
-      this.comments.push({ ...body, user: { type: "Bot" } });
-      return {};
+      const comment = {
+        ...body,
+        id: this.comments.length + 1,
+        path,
+        user: { type: "Bot" },
+      };
+      this.comments.push(comment);
+      return comment;
     }
     throw new Error(path);
   }
   async patch(path: string, body: any) {
+    if (path.includes("/issues/comments/")) {
+      const comment = this.comments.find(
+        (c) => c.id === Number(path.split("/").at(-1)),
+      );
+      Object.assign(comment, body);
+      return comment;
+    }
     if (path.includes("/milestones/")) {
       Object.assign(
         this.milestones.find(
@@ -368,7 +382,11 @@ test("identified native request-changes review triggers revision and preserves f
     assert.equal(s.get("run").findings["comment-edit"][0].revision, 0);
     await game.process("issue_comment", payload(r, "/game finish"));
     assert.match(
-      fake.comments.at(-1).body,
+      fake.comments.find(
+        (c) =>
+          c.body.includes("PR debrief") &&
+          c.path.includes("/" + r.prs["comment-edit"].number + "/"),
+      ).body,
       /review 50, revision 0: consequence/,
     );
   } finally {
@@ -717,7 +735,11 @@ test("advisory coaching covers sound PRs, is replay safe and cannot trigger revi
     assert.equal(s.get(r.id).coaching?.[id].length, 4);
     await game.process("issue_comment", payload(r, "/game finish"));
     assert.match(
-      fake.comments.at(-1).body,
+      fake.comments.find(
+        (c) =>
+          c.body.includes("PR debrief") &&
+          c.path.includes("/" + r.prs[id].number + "/"),
+      ).body,
       /Review coaching \(no score impact\)/,
     );
   } finally {
@@ -751,8 +773,58 @@ test("coaching failure cannot prevent finishing a stage", async () => {
     await game.process("issue_comment", payload(r, "/game finish"));
     assert.equal(s.get(r.id).phase, "finished");
     assert.ok(
-      !fake.comments.at(-1).body.includes("Review coaching (no score impact)"),
+      !fake.comments.some((c) =>
+        c.body.includes("Review coaching (no score impact)"),
+      ),
     );
+  } finally {
+    s.close();
+  }
+});
+
+test("feedback stays hidden during play and publishing resumes after a lost PR-comment response", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    assert.ok(!fake.comments.some((c) => c.body.includes("PR debrief")));
+    const post = fake.post.bind(fake);
+    let loseResponse = true;
+    fake.post = async (path, body) => {
+      const comment = await post(path, body);
+      if (loseResponse && body.body?.includes("PR debrief")) {
+        loseResponse = false;
+        throw new Error("Response lost after GitHub saved the comment");
+      }
+      return comment;
+    };
+    await assert.rejects(
+      game.process("issue_comment", payload(r, "/game finish")),
+      /Response lost/,
+    );
+    assert.equal(s.get(r.id).phase, "finishing");
+    assert.ok(!fake.comments.some((c) => c.body.includes("Stage debrief")));
+    const frozen = s.get(r.id).result;
+    await game.publish(s.get(r.id), fake as unknown as GitHub);
+    await game.publish(s.get(r.id), fake as unknown as GitHub);
+    assert.deepEqual(s.get(r.id).result, frozen);
+    const details = fake.comments.filter(
+      (c) => c.body.includes("PR debrief") && !c.body.includes("Stage debrief"),
+    );
+    assert.equal(details.length, proposals.length);
+    const overview = fake.comments.find((c) =>
+      c.body.includes("Stage debrief"),
+    );
+    assert.equal(
+      fake.comments.filter((c) => c.body.includes("Stage debrief")).length,
+      1,
+    );
+    assert.ok(!overview.body.includes("Expected concern:"));
+    assert.ok(!overview.body.includes("Files in the authored change"));
+    for (const detail of details) {
+      const number = detail.path.split("/").at(-2);
+      assert.ok(
+        overview.body.includes(`/pull/${number}#issuecomment-${detail.id}`),
+      );
+    }
   } finally {
     s.close();
   }

@@ -124,3 +124,11 @@ The v1 publisher deliberately supports regular UTF-8 files, at most 120 files / 
 A stage's next entry is the next item in `scenario.yaml`. After debrief the player can comment `/game next`. A new branch starts from the next authored snapshot, preserving previous history and frozen results. The same Game Master issue #1 is updated with the next brief. All pending prepared revisions and scoring stay deterministic. Jev remains an optional classifier of review text against the authored concern, with the same global budget.
 
 A useful agent checklist: make the starting app genuinely usable; create changes across the natural UI/API/test boundaries; demonstrate each deliberate defect with an executable witness or reproduction; keep tests plausible rather than revealing the answer; check the canonical sound path; read the rendered story and descriptions; validate and publish. Prefer a few credible characters with specific motivations over a generic greeting on every PR.
+
+## Code readability and released snapshots
+
+Use blank lines between imports and declarations, between functions or object methods, and between logical blocks such as validation, database access, and assertions. Keep shared formatting consistent in the stage baseline and all contribution branches; a PR should show the feature rather than unrelated formatting churn. A formatter preserves existing spacing but does not always add these logical breaks for you.
+
+Release changed snapshots under a new scenario version. Keep prior packages in `scenario-packages` for existing runs; the launcher offers the latest release of each scenario. Preserve old branch captures in archive tags when advancing their branches, and never force-push a published capture. Forum 0.1.1 adds logical whitespace; 0.1.0 remains available for existing playthroughs.
+
+Teaching prose after `<!-- debrief -->` is published in that PR’s thread when the stage ends. The game-master overview links to these comments and highlights at most three takeaways, prioritizing weaker decisions. Keep each takeaway specific and short enough to scan.

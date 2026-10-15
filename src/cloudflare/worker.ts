@@ -1,6 +1,11 @@
 import { launchRoute } from "./launch.ts";
 import { launchPage, launchScript } from "../launch-page.ts";
-import { catalog, findPackage, scenarioFor } from "../packages.ts";
+import {
+  catalog,
+  findPackage,
+  findPackageByDigest,
+  scenarioFor,
+} from "../packages.ts";
 export { LaunchSession } from "./launch.ts";
 import { DurableObject } from "cloudflare:workers";
 import { createHash, timingSafeEqual, randomUUID } from "node:crypto";
@@ -98,7 +103,7 @@ export default {
         url.pathname,
       );
       if (request.method === "GET" && portrait) {
-        const pack = catalog().find((p) => p.digest === portrait[1]),
+        const pack = findPackageByDigest(portrait[1]),
           image = pack?.characters[portrait[2]]?.avatar;
         return image
           ? new Response(image, {

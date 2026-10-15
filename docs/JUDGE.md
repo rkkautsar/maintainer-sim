@@ -15,9 +15,9 @@ Coaching makes a separate request with two questions:
 
 The rubric treats security, accessibility, duplication and concrete maintenance costs as substantive. Calling a real bug a “nit” does not make it cosmetic. Firm technical disagreement is not an insult. Formatting/lint feedback is described as a possible automation candidate; the model cannot claim an existing lint configuration enforces it.
 
-Only validated, confident labels become fixed advice in the debrief, with links to the original reviews. Uncertain dimensions are omitted. Coaching has **no path into points, concern credit, release success or revision decisions**. Tests assert score invariance and that coaching cannot trigger revisions.
+Only validated, confident labels become fixed advice in the PR’s end-of-stage debrief, with links to the original reviews. Uncertain dimensions are omitted. Coaching has **no path into points, concern credit, release success or revision decisions**. Tests assert score invariance and that coaching cannot trigger revisions.
 
-Coaching covers the latest submitted player review on the current authored PR head and its attached inline comments, including sound PRs with no hidden concern. Blank, foreign-user and unsupported-head reviews are excluded. Each stage PR gets at most four coaching attempts across distinct reviews/edits; replayed deliveries reuse the attempt. Failures do not block gameplay or finishing. Finished stage debriefs remain frozen.
+Coaching covers the latest submitted player review on the current authored PR head and its attached inline comments, including sound PRs with no hidden concern. Blank, foreign-user and unsupported-head reviews are excluded. Each stage PR gets at most four coaching attempts across distinct reviews/edits; replayed deliveries reuse the attempt. Failures do not block gameplay or finishing. Finished stage scores and assessment evidence remain frozen; report presentation can be refreshed without reassessing the run.
 
 ## Configuration and spending
 

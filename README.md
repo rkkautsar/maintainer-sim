@@ -77,7 +77,9 @@ Roadmap progress and merge/close outcomes use the authored rubric. The debrief e
 
 The deployed trial uses **Cloudflare Clef-flash** to match review text to curated concerns. Read [judge configuration and calibration](docs/JUDGE.md) for the measured results and limitations. A matching request-changes review can trigger its prepared revision; `/game revise <PR-number>` remains available when matching abstains.
 
-Optional review coaching appears in the stage debrief: clarity and constructiveness, substantive concerns, subjective nits, and possible formatter/lint candidates. It is advisory and has no effect on points, concern credit, prepared revisions or release success. It covers submitted GitHub reviews and their attached inline comments, with at most four coaching attempts per PR. Uncertain dimensions are omitted.
+The game-master issue ends with a short score overview, up to three takeaways, and a linked decision table. Each PR receives its own debrief after the stage ends: the outcome, explanation, teaching takeaway, and any review coaching. Publishing retries reuse comments, so interrupted delivery does not duplicate feedback.
+
+Optional review coaching appears in the PR debrief: clarity and constructiveness, substantive concerns, subjective nits, and possible formatter/lint candidates. It is advisory and has no effect on points, concern credit, prepared revisions or release success. It covers submitted GitHub reviews and their attached inline comments, with at most four coaching attempts per PR. Uncertain dimensions are omitted.
 
 All judge and coaching calls use bounded context, cached results and atomic reservations against the shared **$1 per UTC day** inference cap. At the cap or on model failure, deterministic outcomes and debriefs continue. Clef-flash uses the existing Workers AI binding and standard billing, eligible for the shared daily Neuron allowance. The cap conservatively counts list-price usage before that free allowance. There is no live AI code generation in this version.
 
@@ -93,7 +95,7 @@ npm run cf:cli -- retry INSTALLATION_ID
 For manual troubleshooting, export the selected stage into a fresh disposable repository first, then seed with an explicit package:
 
 ```bash
-DISPOSABLE_REPO_CONFIRMED=true npm run cf:cli -- seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_ID forum 0.1.0 launch
+DISPOSABLE_REPO_CONFIRMED=true npm run cf:cli -- seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_ID forum 0.1.1 launch
 ```
 
 The local CLI provides equivalent `seed`, `status`, and `retry-deliveries` commands. `resume RUN_ID` retries interrupted local seeding or result publication.

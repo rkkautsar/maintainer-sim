@@ -94,88 +94,160 @@ export function assess(run: Run): Assessment {
       : "Not assessed (outcome-only fallback).",
   };
 }
-export function debrief(run: Run): string {
-  const { proposals } = scenarioFor(run);
-  const variant = (id: string, revision: number) =>
-    authoredVariant(run, id, revision);
-  const r = run.result ?? assess(run);
+/** Detailed feedback is published only after the stage ends, in the PR thread. */
+export function prDebrief(run: Run, id: string): string {
+  const p = scenarioFor(run).proposals.find((p) => p.id === id)!;
+  const state = run.prs[id];
+  const result = run.result ?? assess(run);
+  const decision = result.decisions.find((d) => d.id === id)!;
+  const v = authoredVariant(run, id, state.revision);
   const lines = [
-    "## Stage debrief",
+    "## 🔎 PR debrief",
     "",
-    storyEnding(r, run),
+    `**Decision:** ${decision.outcome} · **Revision:** ${state.revision} · **Points:** ${decision.points === null ? "unscored" : decision.points > 0 ? "+" + decision.points : decision.points}`,
     "",
-    `Milestone: ${r.complete.length}/${r.total} requirements satisfied.${r.unverified?.length ? " Not assessed: " + r.unverified.join(", ") + "." : ""}`,
-    r.maximum
-      ? `Decision quality: ${r.points}/${r.maximum}.`
-      : "Decision quality: not assessed (no scorable decisions).",
-    `Stage: ${r.success === null ? "partially assessed" : r.success ? "successful" : "incomplete or unhealthy"}.`,
-    `Accepted concerns: ${r.harmful.length ? r.harmful.join(", ") : "none"}.`,
-    `Maintainability debt: ${r.debt.length ? r.debt.join("; ") : "none"}.`,
+    "### What happened",
     "",
-    `Concern identification: ${r.reasoning}`,
-    `Review effort: ${Object.values(run.prs).reduce((n, p) => n + p.reviews.length, 0)} submitted reviews (informational).`,
-    "",
+    decision.explanation,
   ];
-  for (const warning of r.warnings ?? [])
-    lines.push(`Assessment note: ${warning}`);
-  if (r.decisions.some((d) => d.points === null))
-    lines.push(
-      "Unscored decisions are excluded from the available points; a partial score is not a full-stage result.",
-      "",
-    );
-  for (const d of r.decisions) {
-    const p = proposals.find((p) => p.id === d.id)!,
-      state = run.prs[d.id],
-      v = variant(d.id, state.revision);
-    if (d.points === null) {
-      lines.push(
-        `- PR ${state.number}: **${d.outcome}** (unscored). ${d.explanation}`,
-      );
-      continue;
-    }
+  if (decision.points !== null) {
     const recommendation = v.sound
       ? p.issue
         ? "Merge to deliver the issue, or close if a sound alternative already delivered it."
-        : "Merge or defer this useful community improvement."
-      : "Request the prepared fix or close/defer the flawed submission.";
+        : "This is a useful community improvement; weigh it against the milestone and review time."
+      : "Request the prepared fix, or close/defer the flawed submission.";
+    if (v.concern) lines.push("", `**Concern in this revision:** ${v.concern}`);
     lines.push(
-      `- PR ${state.number}, revision ${state.revision}: **${d.outcome}** (${d.points} points). ${d.explanation} ${v.concern ? "Expected concern: " + v.concern + " " : ""}Recommended action: ${recommendation} Code: ${Object.keys(v.files).join(", ")}.`,
+      "",
+      `**Recommended action:** ${recommendation}`,
+      "",
+      "### 💡 Takeaway",
+      "",
+      p.lesson ?? "Review the contribution against its linked requirements.",
+    );
+    const findings = run.findings[id] ?? [];
+    if (findings.length) {
+      lines.push("", "### Concern identification", "");
+      for (const f of findings) {
+        lines.push(
+          `- review ${f.reviewId}, revision ${f.revision}: ${f.category}. Expected concern: ${authoredVariant(run, id, f.revision).concern ?? "none"}`,
+        );
+      }
+    } else
+      lines.push(
+        "",
+        "**Concern identification:** Not assessed (outcome-only fallback).",
+      );
+    const coached = (run.coaching?.[id] ?? []).filter((a) => a.feedback);
+    if (coached.length) {
+      lines.push(
+        "",
+        "### 💬 Review coaching (no score impact)",
+        "",
+        "Automated suggestions about your review wording. These can be imperfect; uncertain dimensions are omitted.",
+        "",
+      );
+      for (const c of coached) {
+        const messages = [c.feedback?.constructiveness, c.feedback?.focus]
+          .filter(Boolean)
+          .map((key) => coachingAdvice[key as keyof typeof coachingAdvice]);
+        lines.push(
+          `- [Review ${c.reviewId}](https://github.com/${run.owner}/${run.repo}/pull/${state.number}#pullrequestreview-${c.reviewId}), revision ${c.revision}: ${messages.join(" ")}`,
+        );
+      }
+    }
+    lines.push(
+      "",
+      "<details>",
+      "<summary>Files in the authored change</summary>",
+      "",
+      ...[...Object.keys(v.files), ...(v.deletes ?? [])].map(
+        (file) => `- \`${file}\``,
+      ),
+      "",
+      "</details>",
     );
   }
-  lines.push("", "## Review takeaways", "");
-  for (const p of proposals)
+  lines.push(
+    "",
+    `[← Stage overview](https://github.com/${run.owner}/${run.repo}/issues/${run.master})`,
+  );
+  return lines.join("\n");
+}
+
+export function debrief(
+  run: Run,
+  feedbackLinks: Record<string, string> = {},
+): string {
+  const { proposals, issues } = scenarioFor(run);
+  const r = run.result ?? assess(run);
+  const link = (id: string) =>
+    feedbackLinks[id] ??
+    `https://github.com/${run.owner}/${run.repo}/pull/${run.prs[id].number}`;
+  const lines = [
+    "## 🏁 Stage debrief",
+    "",
+    storyEnding(r, run),
+    "",
+    "| Milestone | Decision quality | Release |",
+    "| :-- | :-- | :-- |",
+    `| ${r.complete.length}/${r.total} requirements satisfied | ${r.maximum ? `${r.points}/${r.maximum}` : "Not assessed"} | ${r.success === null ? "⚪ partially assessed" : r.success ? "🟢 Ready" : "🟠 Needs work"} |`,
+    "",
+  ];
+  const missing = issues.filter((i) => !r.complete.includes(i.id));
+  if (missing.length)
     lines.push(
-      `- PR ${run.prs[p.id].number}: ${p.lesson ?? "Review the contribution against its linked requirements."}`,
+      `**Still needed:** ${missing.map((i) => i.title).join("; ")}.`,
+      "",
     );
-  lines.push("");
-  for (const [id, findings] of Object.entries(run.findings).filter(
-    ([id]) => !run.prs[id].unscored,
-  ))
-    for (const f of findings)
-      lines.push(
-        `- PR ${run.prs[id].number}, review ${f.reviewId}, revision ${f.revision}: ${f.category}. Expected concern: ${variant(id, f.revision).concern ?? "none"}`,
-      );
-  const coached = Object.entries(run.coaching ?? {})
-    .filter(([id]) => run.prs[id] && !run.prs[id].unscored)
-    .flatMap(([id, attempts]) =>
-      attempts.filter((a) => a.feedback).map((a) => ({ id, ...a })),
-    );
-  if (coached.length) {
+  if (r.harmful.length)
     lines.push(
-      "",
-      "## Review coaching (no score impact)",
-      "",
-      "Optional automated observations about the review message. These do not change points, concern credit, prepared revisions, or release success. Uncertain dimensions are omitted.",
+      `**⚠️ Shipped concerns:** ${r.harmful.map((id) => `[#${run.prs[id].number}](${link(id)})`).join(", ")}.`,
       "",
     );
-    for (const c of coached) {
-      const messages = [c.feedback?.constructiveness, c.feedback?.focus]
-        .filter(Boolean)
-        .map((key) => coachingAdvice[key as keyof typeof coachingAdvice]);
+  if (r.debt.length)
+    lines.push(`**Maintenance debt:** ${r.debt.join("; ")}.`, "");
+  const lessons = [...r.decisions]
+    .filter((d) => d.points !== null)
+    .sort((a, b) => a.points! - b.points!)
+    .slice(0, 3);
+  if (lessons.length) {
+    lines.push("### 💡 Take into the next stage", "");
+    for (const d of lessons) {
+      const p = proposals.find((p) => p.id === d.id)!;
       lines.push(
-        `- PR ${run.prs[c.id].number}, [review ${c.reviewId}](https://github.com/${run.owner}/${run.repo}/pull/${run.prs[c.id].number}#pullrequestreview-${c.reviewId}), revision ${c.revision}: ${messages.join(" ")}`,
+        `- ${p.lesson ?? "Check the contribution against its linked requirements."} ([#${run.prs[d.id].number}](${link(d.id)}))`,
       );
     }
+    lines.push("");
   }
+  lines.push(
+    "### 📋 Your decisions",
+    "",
+    "Open a PR debrief for the explanation, code takeaway, and any review coaching.",
+    "",
+    "| PR | Outcome | Points | Feedback |",
+    "| :-- | :-- | --: | :-- |",
+  );
+  for (const d of r.decisions) {
+    const state = run.prs[d.id];
+    const p = proposals.find((p) => p.id === d.id)!;
+    lines.push(
+      `| #${state.number} ${p.title.replaceAll("|", "\\|").replaceAll("\n", " ")} | ${d.outcome} | ${d.points === null ? "—" : d.points > 0 ? "+" + d.points : d.points} | [🔎 PR debrief](${link(d.id)}) |`,
+    );
+  }
+  lines.push(
+    "",
+    `**Review assessment:** ${Object.keys(run.findings).length ? "Concern identification is recorded in the PR debriefs." : "Not assessed (outcome-only fallback)."} Automated coaching is advisory and does not change the score.`,
+    "",
+    "Requirements are verified against the scenario rubric; GitHub’s closed-issue count can differ.",
+  );
+  if (r.decisions.some((d) => d.points === null))
+    lines.push(
+      "",
+      "⚪ Unscored decisions are excluded from available points; this is a partial assessment.",
+    );
+  for (const warning of r.warnings ?? [])
+    lines.push("", `**Assessment note:** ${warning}`);
   return lines.join("\n");
 }
