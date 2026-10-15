@@ -1,5 +1,4 @@
 import { launchRoute } from "./launch.ts";
-import { launchPage, launchScript } from "../launch-page.ts";
 import {
   catalog,
   findPackage,
@@ -67,22 +66,6 @@ export default {
         response.headers.set("x-content-type-options", "nosniff");
         return response;
       }
-      if (request.method === "GET" && url.pathname === "/")
-        return new Response(launchPage, {
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "content-security-policy":
-              "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-            "x-content-type-options": "nosniff",
-          },
-        });
-      if (request.method === "GET" && url.pathname === "/launch.js")
-        return new Response(launchScript, {
-          headers: {
-            "content-type": "text/javascript; charset=utf-8",
-            "cache-control": "no-cache",
-          },
-        });
       if (request.method === "GET" && url.pathname === "/setup")
         return Response.redirect(
           new URL("/", env.PUBLIC_ORIGIN ?? url.origin),

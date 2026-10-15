@@ -254,7 +254,8 @@ for (const pack of [
             p.includes("__scenario__"),
           ),
         );
-        savePackage(fresh, dest);
+        const released = savePackage(fresh, dest);
+        writeFileSync(released, JSON.stringify(fresh, null, 4) + "\n");
         savePackage(fresh, dest);
         assert.throws(
           () => savePackage({ ...fresh, title: "Mutated" }, dest),

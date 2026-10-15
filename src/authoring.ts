@@ -392,7 +392,8 @@ export function savePackage(pack: ScenarioPackage, dest: string) {
     content = JSON.stringify(pack, null, 2) + "\n";
   if (existsSync(file))
     need(
-      readFileSync(file, "utf8") === content,
+      JSON.stringify(JSON.parse(readFileSync(file, "utf8"))) ===
+        JSON.stringify(pack),
       "Published version is immutable; increment version",
     );
   else writeFileSync(file, content);

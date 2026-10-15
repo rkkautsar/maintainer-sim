@@ -23,11 +23,14 @@ Requires Node.js 24 or newer.
 
 ```bash
 npm install
+npm run format:check
 npm run check
 npm test
 npm run test:cf
 npm run demo
 ```
+
+`npm run format` formats the repository; generated packages use the same Prettier formatter during builds. The launcher is plain HTML, JavaScript, and CSS in `public/`.
 
 `demo` prints a deterministic Forum debrief without contacting GitHub or an AI service. `test:cf` builds the Worker and runs the Cloudflare runtime tests with mocked GitHub calls.
 
@@ -46,6 +49,10 @@ See [launch configuration](docs/LAUNCH.md) for the App callback, setup URL, perm
 ```bash
 npm run cf:deploy
 ```
+
+GitHub Actions runs formatting, TypeScript, service/scenario tests, and Cloudflare runtime tests on pull requests and pushes to `main`. After those checks pass, pushes to `main` deploy the Worker and static assets, then probe the public health and asset URLs. Manual runs are available through Actions. Configure repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` first; the token should use the Edit Cloudflare Workers template scoped to your deployment account. Existing Worker secrets stay in Cloudflare. See [launch and deployment configuration](docs/LAUNCH.md).
+
+The current [code quality review](docs/CODE_REVIEW.md) records remaining prototype shortcuts and the recommended cleanup order.
 
 Contents, Issues, and Pull requests need write access; Metadata needs read access. The launcher also needs repository-creation permission through user authorization. Installation and repository-access events handle access changes; installing the App alone does not create a game.
 

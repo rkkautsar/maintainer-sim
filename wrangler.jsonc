@@ -3,43 +3,40 @@
   "name": "maintainer-sim",
   "main": "src/cloudflare/worker.ts",
   "compatibility_date": "2026-01-01",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "none",
+  },
   "durable_objects": {
     "bindings": [
       {
         "name": "GAMES",
-        "class_name": "GameSession"
+        "class_name": "GameSession",
       },
       {
         "name": "BUDGET",
-        "class_name": "AIBudget"
+        "class_name": "AIBudget",
       },
       {
         "name": "LAUNCHES",
-        "class_name": "LaunchSession"
-      }
-    ]
+        "class_name": "LaunchSession",
+      },
+    ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": [
-        "GameSession",
-        "AIBudget"
-      ]
+      "new_sqlite_classes": ["GameSession", "AIBudget"],
     },
     {
       "tag": "v2",
-      "new_sqlite_classes": [
-        "LaunchSession"
-      ]
-    }
+      "new_sqlite_classes": ["LaunchSession"],
+    },
   ],
   "ai": {
-    "binding": "AI"
+    "binding": "AI",
   },
   "vars": {
     "JUDGE_ENABLED": "true",
@@ -50,12 +47,12 @@
     "AI_DAILY_BUDGET_USD": "1",
     "GITHUB_CLIENT_ID": "Iv23liIU7hVd8ynBoZN4",
     "GITHUB_APP_SLUG": "maintainer-sim",
-    "PUBLIC_ORIGIN": "https://maintainer-sim.rkkautsar.workers.dev"
+    "PUBLIC_ORIGIN": "https://maintainer-sim.rkkautsar.workers.dev",
   },
   "build": {
-    "command": "node scripts/bundle-packages.ts"
+    "command": "node scripts/bundle-packages.ts",
   },
   "observability": {
-    "enabled": true
-  }
+    "enabled": true,
+  },
 }

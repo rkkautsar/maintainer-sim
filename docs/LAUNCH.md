@@ -1,6 +1,8 @@
 # Configure the GitHub launch page
 
-The existing Cloudflare Worker serves `/`, the scenario catalog, portrait assets, GitHub App OAuth, and durable launch jobs. No template repository is required. Player-owned repositories start private by default; the player can select public before creation. Personal accounts are supported first. Each authenticated account can create at most five playthroughs per UTC day.
+Cloudflare serves the launcher directly from `public/index.html`, `public/app.js`, and `public/style.css` through Workers Static Assets. Edit those files directly; no frontend framework or compilation step is required. `public/_headers` defines the static response security headers and revalidation policy.
+
+The Worker handles the scenario catalog, portrait assets, GitHub App OAuth, and durable launch jobs. Unknown routes return 404 rather than the launcher HTML. No template repository is required. Player-owned repositories start private by default; the player can select public before creation. Personal accounts are supported first. Each authenticated account can create at most five playthroughs per UTC day.
 
 Open [Maintainer Sim settings](https://github.com/settings/apps/maintainer-sim) to configure the existing [GitHub App](https://github.com/apps/maintainer-sim). Its [installation page](https://github.com/apps/maintainer-sim/installations/new) grants access to player repositories.
 
@@ -24,3 +26,15 @@ OAuth uses one-use expiring state and PKCE. Access tokens stay in server-side Du
 Required live verification after registration changes: sign in, choose Forum, create a disposable private repository, verify one Game Master issue and ten initial PRs, inspect portraits, retry a reload during preparation, and finish/advance a stage. Runtime tests intercept external GitHub calls and verify the same flow without creating real repositories or paid AI calls. Those tests cannot prove the App registration has the required grants.
 
 References: [repository creation](https://docs.github.com/en/rest/repos/repos#create-a-repository-for-the-authenticated-user), [App-created repository access](https://docs.github.com/en/apps/using-github-apps/installing-a-github-app-from-a-third-party), [OAuth and PKCE](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app), [setup URL validation](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url).
+
+Static assets are configured in `wrangler.jsonc`. Run `npm run cf:dev` to test both the page and Worker routes locally. `npm run test:cf` exercises the real asset router alongside mocked GitHub calls, including asset content types, security headers, and dynamic route handling.
+
+## Continuous deployment
+
+`.github/workflows/ci.yml` checks pull requests and `main` using Node 24 and `npm ci`. Formatting, TypeScript, service/scenario tests, and Cloudflare runtime tests must pass. A generated-package diff check catches stale bundles. Only `main` can enter the production deployment job; pull requests do not receive deployment credentials. Workflow concurrency serializes main-branch runs.
+
+Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in the repository’s Actions secrets. Create a dedicated deployment token using Cloudflare’s **Edit Cloudflare Workers** template, scoped to the account that owns this Worker. The workflow uses the pinned Wrangler dependency through `npm run cf:deploy`, uploading Worker code and `public/` assets together. GitHub App credentials and other runtime secrets stay configured on the Worker.
+
+After deployment, the workflow probes `/health`, `/app.js`, and `/style.css`. Use Actions → Check and deploy → Run workflow on `main` to retry after configuring secrets. A successful check job alone does not mean production was deployed; inspect the separate deploy job.
+
+References: [Cloudflare GitHub Actions setup](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) and [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/).

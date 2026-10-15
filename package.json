@@ -19,7 +19,9 @@
     "test:cf": "npm run cf:check && node --test test/cloudflare/*.test.ts",
     "scenario": "node scripts/scenario.ts",
     "bundle:packages": "node scripts/bundle-packages.ts",
-    "judge:calibrate": "node scripts/calibrate-judge.ts"
+    "judge:calibrate": "node scripts/calibrate-judge.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@octokit/rest": "^22.0.0",

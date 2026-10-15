@@ -209,6 +209,7 @@ function fixture(
   const mf = new Miniflare({
     modules: true,
     scriptPath: "var/worker-build/worker.js",
+    assets: { directory: "public", routerConfig: { has_user_worker: true } },
     compatibilityDate: "2026-01-01",
     compatibilityFlags: ["nodejs_compat"],
     durableObjects: {
@@ -284,7 +285,39 @@ test("launch page exposes public catalog only and rejects unauthenticated writes
   try {
     const html = await mf.dispatchFetch("https://app/");
     assert.equal(html.status, 200);
-    assert.match(await html.text(), /Someone has to/);
+    const markup = await html.text();
+    assert.match(markup, /Someone has to/);
+    assert.match(markup, /src="\/app\.js"/);
+    assert.match(markup, /href="\/style\.css"/);
+    assert.ok(!markup.includes("<style>"));
+    assert.ok(!markup.includes("<script>"));
+    assert.match(
+      html.headers.get("content-security-policy") ?? "",
+      /style-src 'self';/,
+    );
+    for (const [path, type] of [
+      ["/app.js", "javascript"],
+      ["/style.css", "css"],
+    ]) {
+      const asset = await mf.dispatchFetch("https://app" + path);
+      assert.equal(asset.status, 200);
+      assert.ok(asset.headers.get("content-type")?.includes(type));
+      assert.equal(asset.headers.get("x-content-type-options"), "nosniff");
+      assert.equal(asset.headers.get("cache-control"), "no-cache");
+      assert.ok((await asset.text()).length > 100);
+    }
+    assert.equal(
+      (await mf.dispatchFetch("https://app/missing.js")).status,
+      404,
+    );
+    assert.equal(
+      (
+        await mf.dispatchFetch("https://app/api/missing", {
+          headers: { "sec-fetch-mode": "navigate" },
+        })
+      ).status,
+      404,
+    );
     const catalog = (await (
       await mf.dispatchFetch("https://app/api/scenarios")
     ).json()) as any[];

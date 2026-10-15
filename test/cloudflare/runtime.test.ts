@@ -13,6 +13,7 @@ function runtime(extra: any = {}) {
   return new Miniflare({
     modules: true,
     scriptPath: "var/worker-build/worker.js",
+    assets: { directory: "public", routerConfig: { has_user_worker: true } },
     compatibilityDate: "2026-01-01",
     compatibilityFlags: ["nodejs_compat"],
     durableObjects: {

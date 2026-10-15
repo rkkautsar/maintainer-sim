@@ -1,0 +1,6 @@
+node_modules/
+var/
+.wrangler/
+data/
+coverage/
+package-lock.json
