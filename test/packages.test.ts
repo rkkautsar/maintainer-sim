@@ -2,7 +2,36 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { catalog, findPackage, packageScope } from "../src/packages.ts";
 import { packages } from "./fixtures/packages.ts";
-import { GitHubPackageRegistry } from "../src/package-registry.ts";
+import {
+  GitHubPackageRegistry,
+  publicRequest,
+} from "../src/package-registry.ts";
+
+test("public package requests survive an unavailable edge cache", async () => {
+  let sourceRequests = 0;
+  const edge = {
+    async match() {
+      throw new Error("Cache unavailable");
+    },
+    async put() {
+      throw new Error("Cache unavailable");
+    },
+  } as unknown as Cache;
+
+  const response = await publicRequest(
+    "https://api.github.com/repos/example/scenario",
+    undefined,
+    edge,
+    async () => {
+      sourceRequests++;
+      return Response.json({ private: false });
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { private: false });
+  assert.equal(sourceRequests, 1);
+});
 
 test("package lookups stay isolated across concurrent async scopes", async () => {
   const observed = await Promise.all(

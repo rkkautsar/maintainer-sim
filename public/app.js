@@ -10,7 +10,18 @@ async function call(path, body) {
       : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw Error(
+      response.ok
+        ? "The server returned an invalid response. Try refreshing."
+        : response.status >= 500
+          ? "Service temporarily unavailable. Try again."
+          : "The server returned an invalid response. Try again.",
+    );
+  }
   if (!response.ok)
     throw Error(data.error || "Something went wrong. Try again.");
   return data;

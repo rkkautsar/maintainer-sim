@@ -5,18 +5,27 @@ import { packageScope, type ScenarioPackage } from "./packages.ts";
 import { parse } from "./validation.ts";
 import { errorStatus } from "./diagnostics.ts";
 
-async function publicRequest(
+export async function publicRequest(
   input: Parameters<typeof fetch>[0],
   init?: Parameters<typeof fetch>[1],
+  cacheOverride?: Cache | null,
+  sourceFetch: typeof fetch = fetch,
 ) {
   const request = new Request(input, init);
   const edge =
-    typeof caches === "undefined"
-      ? undefined
-      : (caches as CacheStorage & { default?: Cache }).default;
-  const cached = await edge?.match(request);
+    cacheOverride !== undefined
+      ? (cacheOverride ?? undefined)
+      : typeof caches === "undefined"
+        ? undefined
+        : (caches as CacheStorage & { default?: Cache }).default;
+  let cached: Response | undefined;
+  try {
+    cached = await edge?.match(request);
+  } catch {
+    // Cache availability must never block a successful source response.
+  }
   if (cached) return cached;
-  const response = await fetch(request);
+  const response = await sourceFetch(request);
   if (edge && response.ok) {
     const copy = new Response(response.clone().body, response);
     copy.headers.set("cache-control", "public,max-age=300");
