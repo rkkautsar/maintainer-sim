@@ -4,7 +4,13 @@ import type { Run, Assessment } from "./types.ts";
 export function initialRun(
   input: Pick<
     Run,
-    "id" | "installation" | "repository" | "owner" | "repo" | "player"
+    | "id"
+    | "installation"
+    | "repository"
+    | "owner"
+    | "repo"
+    | "player"
+    | "scenario"
   >,
 ): Run {
   return { ...input, phase: "seeding", issues: {}, prs: {}, findings: {} };

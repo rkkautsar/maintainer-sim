@@ -2,7 +2,9 @@
 
 The existing Cloudflare Worker serves `/`, the scenario catalog, portrait assets, GitHub App OAuth, and durable launch jobs. No template repository is required. Player-owned repositories start private by default; the player can select public before creation. Personal accounts are supported first. Each authenticated account can create at most five playthroughs per UTC day.
 
-Configure the existing Maintainer Sim GitHub App:
+Open [Maintainer Sim settings](https://github.com/settings/apps/maintainer-sim) to configure the existing [GitHub App](https://github.com/apps/maintainer-sim). Its [installation page](https://github.com/apps/maintainer-sim/installations/new) grants access to player repositories.
+
+Configure:
 
 - Homepage: `https://maintainer-sim.rkkautsar.workers.dev/`
 - Callback URL: `https://maintainer-sim.rkkautsar.workers.dev/auth/callback`

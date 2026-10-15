@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { initialRun, assess, expectedFiles, debrief } from "../src/engine.ts";
-import { baseline, proposals } from "../src/scenario.ts";
+import { findPackage, selectScenario } from "../src/packages.ts";
+const pack = findPackage("forum", "0.1.0");
+const { baseline, proposals } = pack.stages[0];
 import { Store } from "../src/store.ts";
 import { validSignature, command } from "../src/security.ts";
 import { Judge } from "../src/judge.ts";
@@ -14,6 +16,7 @@ export function fixture() {
     owner: "owner",
     repo: "game",
     player: 3,
+    scenario: selectScenario(pack),
   });
   r.phase = "active";
   r.master = 99;
@@ -29,16 +32,23 @@ export function fixture() {
     };
   return r;
 }
-test("good decisions complete milestone; prepared fix unlocks issue", () => {
+test("sound implementations and prepared fixes deliver the Forum milestone", () => {
   const r = fixture();
-  for (const id of ["a", "c", "d"]) r.prs[id].outcome = "merged";
-  r.prs.c.revision = 1;
-  r.prs.d.revision = 1;
-  r.prs.b.outcome = "closed";
-  r.prs.f.outcome = "closed";
+  for (const state of Object.values(r.prs)) state.outcome = "closed";
+  for (const id of [
+    "voting-simple",
+    "search-simple",
+    "bookmarks",
+    "comment-edit",
+    "pagination",
+  ])
+    r.prs[id].outcome = "merged";
+  for (const id of ["bookmarks", "comment-edit", "pagination"])
+    r.prs[id].revision = 1;
   const score = assess(r);
   assert.equal(score.success, true);
-  assert.equal(score.points, 12);
+  assert.equal(score.points, 20);
+  assert.equal(score.complete.length, 5);
   assert.match(debrief(r), /Not assessed/);
 });
 test("rejecting every contribution does not deliver milestone", () => {
@@ -47,47 +57,53 @@ test("rejecting every contribution does not deliver milestone", () => {
   assert.equal(assess(r).success, false);
   assert.equal(assess(r).complete.length, 0);
 });
-test("unauthorized edit implementation prevents success", () => {
+test("unauthorized comment editing prevents success", () => {
   const r = fixture();
-  r.prs.c.outcome = "merged";
-  assert.deepEqual(assess(r).harmful, ["c"]);
-  assert.equal(assess(r).decisions.find((x) => x.id === "c")?.points, -2);
+  r.prs["comment-edit"].outcome = "merged";
+  assert.deepEqual(assess(r).harmful, ["comment-edit"]);
+  assert.equal(
+    assess(r).decisions.find((x) => x.id === "comment-edit")?.points,
+    -2,
+  );
 });
-test("prepared alternative satisfies competing issue", () => {
+test("prepared alternative delivers competing issue without penalizing closure of clean alternative", () => {
   const r = fixture();
-  r.prs.b.revision = 1;
-  r.prs.b.outcome = "merged";
-  r.prs.a.outcome = "closed";
-  assert.ok(assess(r).complete.includes("likes"));
-  assert.equal(assess(r).decisions[0].points, 2);
+  r.prs["voting-framework"].revision = 1;
+  r.prs["voting-framework"].outcome = "merged";
+  r.prs["voting-simple"].outcome = "closed";
+  assert.ok(assess(r).complete.includes("voting"));
+  assert.equal(
+    assess(r).decisions.find((d) => d.id === "voting-simple")?.points,
+    2,
+  );
 });
 test("early finish defers open contributions", () => {
-  const r = fixture();
-  const score = assess(r);
+  const score = assess(fixture());
   assert.ok(score.decisions.every((x) => x.outcome === "deferred"));
   assert.equal(score.success, false);
 });
-test("merged expected tree contains only authored effects", () => {
+test("merged expected tree contains exactly authored effects", () => {
   const r = fixture();
   assert.deepEqual(expectedFiles(r), baseline);
-  r.prs.c.revision = 1;
-  r.prs.d.revision = 1;
-  r.prs.c.outcome = "merged";
-  assert.match(expectedFiles(r)["src/edit.ts"], /actor !== post.ownerId/);
+  r.prs["comment-edit"].revision = 1;
+  r.prs["comment-edit"].outcome = "merged";
+  const proposal = proposals.find((p) => p.id === "comment-edit")!;
+  for (const [path, content] of Object.entries(proposal.variants[1].files))
+    assert.equal(expectedFiles(r)[path], content);
 });
-test("rubric never enters public baseline", () => {
+test("authoring annotations and rubric never enter public baseline", () => {
   assert.ok(baseline["src/server.ts"]);
   assert.ok(baseline["web/index.html"]);
   assert.ok(baseline["package.json"]);
   assert.ok(
     Object.keys(baseline).every(
-      (p) => !p.includes("rubric") && !p.includes("private"),
+      (p) => !p.includes("__scenario__") && !p.includes("rubric"),
     ),
   );
 });
 test("invalid revision rejected", () => {
   const r = fixture();
-  r.prs.c.revision = 99;
+  r.prs["comment-edit"].revision = 99;
   assert.throws(() => assess(r), /Unknown authored/);
 });
 test("webhook signatures bind raw bytes", () => {
@@ -216,9 +232,9 @@ test("judge caches validated assessment; low confidence falls back", async () =>
 
 test("overengineered implementation delivers the feature but incurs maintainability penalty", () => {
   const r = fixture();
-  r.prs.b.outcome = "merged";
+  r.prs["voting-framework"].outcome = "merged";
   const score = assess(r);
-  assert.ok(score.complete.includes("likes"));
-  assert.ok(score.debt.includes("Unneeded reaction pipeline"));
+  assert.ok(score.complete.includes("voting"));
+  assert.ok(score.debt.includes("Unneeded voting pipeline"));
   assert.equal(score.success, false);
 });

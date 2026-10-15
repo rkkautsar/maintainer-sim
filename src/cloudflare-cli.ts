@@ -1,10 +1,22 @@
+import { findPackage, selectScenario } from "./packages.ts";
 const [command, ...args] = process.argv.slice(2);
 const url = process.env.WORKER_URL,
   token = process.env.ADMIN_TOKEN;
 if (!url || !token) throw new Error("Set WORKER_URL and ADMIN_TOKEN in .env");
 let path: string, body: any;
 if (command === "seed") {
-  const [installation, repository, owner, repo, player] = args;
+  const [
+    installation,
+    repository,
+    owner,
+    repo,
+    player,
+    scenario,
+    version,
+    stage,
+  ] = args;
+  if (!scenario || !version)
+    throw new Error("Provide SCENARIO VERSION [STAGE]");
   path = "/admin/seed";
   body = {
     installation: Number(installation),
@@ -12,19 +24,17 @@ if (command === "seed") {
     owner,
     repo,
     player: Number(player),
+    scenario: selectScenario(findPackage(scenario, version), stage),
     confirmDisposable: process.env.DISPOSABLE_REPO_CONFIRMED === "true",
   };
 } else if (command === "status") {
   path = "/admin/status?installation=" + encodeURIComponent(args[0]);
-} else if (command === "resume") {
-  path = "/admin/resume";
-  body = { installation: Number(args[0]), repository: Number(args[1]) };
 } else if (command === "retry") {
   path = "/admin/retry";
   body = { installation: Number(args[0]) };
 } else
   throw new Error(
-    "Commands: seed INSTALLATION REPOSITORY OWNER REPO PLAYER, status INSTALLATION, retry INSTALLATION, resume INSTALLATION REPOSITORY",
+    "Commands: seed INSTALLATION REPOSITORY OWNER REPO PLAYER SCENARIO VERSION [STAGE], status INSTALLATION, retry INSTALLATION",
   );
 const response = await fetch(new URL(path, url), {
   method: body ? "POST" : "GET",

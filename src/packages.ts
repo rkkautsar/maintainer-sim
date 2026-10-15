@@ -1,5 +1,3 @@
-import { baseline, issues, proposals, version } from "./scenario.ts";
-import { lessons } from "./lessons.ts";
 import { publishedPackages } from "./generated/packages.ts";
 import type { Run, Proposal, Variant } from "./types.ts";
 export type Character = { name: string; role: string; avatar: string };
@@ -23,29 +21,9 @@ export type ScenarioPackage = {
   characters: Record<string, Character>;
   stages: Stage[];
 };
-export const legacy: ScenarioPackage = {
-  schema: 1,
-  id: "pocket-board",
-  version,
-  title: "Pocket Board",
-  description: "Original training scenario",
-  digest: "legacy-pocket-board-v1",
-  characters: {},
-  stages: [
-    {
-      id: "launch",
-      title: "Stage 1 — The Saturday launch",
-      intro: "",
-      baseline,
-      issues,
-      proposals: proposals.map((p) => ({ ...p, lesson: lessons[p.id] })),
-      endings: { success: "", incomplete: "", partial: "" },
-    },
-  ],
-};
 export const catalog = () => publishedPackages;
 export function findPackage(id: string, version?: string): ScenarioPackage {
-  const candidates = [legacy, ...publishedPackages].filter(
+  const candidates = publishedPackages.filter(
     (p) => p.id === id && (!version || p.version === version),
   );
   if (candidates.length !== 1)
@@ -53,14 +31,10 @@ export function findPackage(id: string, version?: string): ScenarioPackage {
   return candidates[0];
 }
 export function scenarioFor(run: Run): Stage & { pack: ScenarioPackage } {
-  const pack = run.scenario
-    ? findPackage(run.scenario.id, run.scenario.version)
-    : legacy;
-  if (run.scenario && pack.digest !== run.scenario.digest)
+  const pack = findPackage(run.scenario.id, run.scenario.version);
+  if (pack.digest !== run.scenario.digest)
     throw new Error("Scenario package digest mismatch");
-  const stage = pack.stages.find(
-    (s) => s.id === (run.scenario?.stage ?? "launch"),
-  );
+  const stage = pack.stages.find((s) => s.id === run.scenario.stage);
   if (!stage) throw new Error("Unknown scenario stage");
   return { ...stage, pack };
 }

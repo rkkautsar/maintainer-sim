@@ -125,7 +125,7 @@ test("literal-search witness catches regex semantics", async () => {
       assert.equal((await request("/api/posts?q=%5B")).status, rev ? 200 : 400),
     );
 });
-test("forum outcome scoring is independent of legacy proposal IDs", () => {
+test("forum outcome scoring is driven by the selected package", () => {
   const run = initialRun({
     id: "forum-test",
     installation: 1,
@@ -133,8 +133,8 @@ test("forum outcome scoring is independent of legacy proposal IDs", () => {
     owner: "a",
     repo: "b",
     player: 3,
+    scenario: selectScenario(pack),
   });
-  run.scenario = selectScenario(pack);
   for (const [n, p] of stage.proposals.entries())
     run.prs[p.id] = {
       number: n + 1,

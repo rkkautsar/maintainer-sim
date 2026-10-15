@@ -51,7 +51,7 @@
     "PUBLIC_ORIGIN": "https://maintainer-sim.rkkautsar.workers.dev"
   },
   "build": {
-    "command": "node scripts/bundle-scenario.ts && node scripts/bundle-packages.ts"
+    "command": "node scripts/bundle-packages.ts"
   },
   "observability": {
     "enabled": true

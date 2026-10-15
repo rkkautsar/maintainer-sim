@@ -1,3 +1,4 @@
+import { findPackage, selectScenario } from "../../src/packages.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -58,6 +59,63 @@ test("workerd handles health, authentication, malformed requests, signed deliver
         })
       ).status,
       400,
+    );
+    const target = {
+      installation: 1,
+      repository: 2,
+      owner: "owner",
+      repo: "game",
+      player: 3,
+      confirmDisposable: true,
+    };
+    for (const scenario of [
+      undefined,
+      { id: "forum", version: "0.1.0", stage: "launch", digest: "invalid" },
+    ]) {
+      assert.equal(
+        (
+          await mf.dispatchFetch("https://app/admin/seed", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ ...target, scenario }),
+          })
+        ).status,
+        400,
+        "seeding requires an explicit validated scenario package",
+      );
+    }
+    const installationBody = JSON.stringify({
+      action: "created",
+      installation: { id: 1 },
+      sender: { id: 3, type: "User" },
+      repositories: [{ id: 2, full_name: "owner/game" }],
+    });
+    assert.equal(
+      (
+        await mf.dispatchFetch("https://app/webhooks", {
+          method: "POST",
+          body: installationBody,
+          headers: {
+            "x-github-event": "installation",
+            "x-github-delivery": "installed",
+            "x-hub-signature-256":
+              "sha256=" +
+              createHmac("sha256", "secret")
+                .update(installationBody)
+                .digest("hex"),
+          },
+        })
+      ).status,
+      202,
+    );
+    assert.deepEqual(
+      await (
+        await mf.dispatchFetch("https://app/admin/status?installation=1", {
+          headers,
+        })
+      ).json(),
+      [],
+      "App installation alone does not start a playthrough",
     );
     assert.equal(
       (
@@ -147,103 +205,79 @@ test("global budget atomically caps concurrent claims and settles actual usage o
     await mf.dispose();
   }
 });
-for (const mode of ["manual", "installation"])
-  test("actual workerd alarm signs GitHub App JWT: " + mode, async () => {
-    const { privateKey, publicKey } = generateKeyPairSync("rsa", {
-      modulusLength: 2048,
-    });
-    let signed = false;
-    const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-    const mf = runtime({
-      bindings: {
-        ADMIN_TOKEN: token,
-        WEBHOOK_SECRET: "secret",
-        GITHUB_APP_ID: "123",
-        GITHUB_PRIVATE_KEY: pem,
-        JEV_CALIBRATED: "false",
-        JEV_INPUT_USD_PER_MILLION: "0.042",
-        AI_DAILY_BUDGET_USD: "1",
-        JEV_CONFIDENCE_THRESHOLD: "0.9",
-      },
-      outboundService: async (request: any) => {
-        if (
-          new URL(request.url).pathname === "/app/installations/1/access_tokens"
-        ) {
-          const jwt = request.headers
-            .get("Authorization")!
-            .replace(/^(token|Bearer) /i, "");
-          const [header, body, signature] = jwt.split(".");
-          assert.equal(
-            verify(
-              "RSA-SHA256",
-              Buffer.from(header + "." + body),
-              publicKey,
-              Buffer.from(signature, "base64url"),
-            ),
-            true,
-          );
-          assert.equal(
-            JSON.parse(Buffer.from(body, "base64url").toString()).iss,
-            "123",
-          );
-          signed = true;
-          return Response.json({
-            token: "fixture-installation-token",
-            expires_at: new Date(Date.now() + 3600000).toISOString(),
-          }) as any;
-        }
-        return new Response("Fixture denies all other GitHub calls", {
-          status: 503,
-        }) as any;
-      },
-    });
-    try {
-      const installBody = JSON.stringify({
-        action: "created",
-        installation: { id: 1 },
-        sender: { id: 3, type: "User" },
-        repositories: [{ id: 2, full_name: "owner/game" }],
-      });
-      const response =
-        mode === "installation"
-          ? await mf.dispatchFetch("https://app/webhooks", {
-              method: "POST",
-              body: installBody,
-              headers: {
-                "x-github-event": "installation",
-                "x-github-delivery": "installation-one",
-                "x-hub-signature-256":
-                  "sha256=" +
-                  createHmac("sha256", "secret")
-                    .update(installBody)
-                    .digest("hex"),
-              },
-            })
-          : await mf.dispatchFetch("https://app/admin/seed", {
-              method: "POST",
-              headers: { Authorization: "Bearer " + token },
-              body: JSON.stringify({
-                installation: 1,
-                repository: 2,
-                owner: "owner",
-                repo: "game",
-                player: 3,
-                confirmDisposable: true,
-              }),
-            });
-      assert.equal(response.status, 202);
-      for (let i = 0; i < 40 && !signed; i++)
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      assert.equal(signed, true, "durable alarm must execute JWT signing");
-      const status = await mf.dispatchFetch(
-        "https://app/admin/status?installation=1",
-        { headers: { Authorization: "Bearer " + token } },
-      );
-      assert.equal(
-        ((await status.json()) as any[]).length,
-        mode === "manual" ? 1 : 0,
-      );
-    } finally {
-      await mf.dispose();
-    }
+test("actual workerd alarm signs GitHub App JWT for a packaged seed", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
   });
+  let signed = false;
+  const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const mf = runtime({
+    bindings: {
+      ADMIN_TOKEN: token,
+      WEBHOOK_SECRET: "secret",
+      GITHUB_APP_ID: "123",
+      GITHUB_PRIVATE_KEY: pem,
+      JEV_CALIBRATED: "false",
+      JEV_INPUT_USD_PER_MILLION: "0.042",
+      AI_DAILY_BUDGET_USD: "1",
+      JEV_CONFIDENCE_THRESHOLD: "0.9",
+    },
+    outboundService: async (request: any) => {
+      if (
+        new URL(request.url).pathname === "/app/installations/1/access_tokens"
+      ) {
+        const jwt = request.headers
+          .get("Authorization")!
+          .replace(/^(token|Bearer) /i, "");
+        const [header, body, signature] = jwt.split(".");
+        assert.equal(
+          verify(
+            "RSA-SHA256",
+            Buffer.from(header + "." + body),
+            publicKey,
+            Buffer.from(signature, "base64url"),
+          ),
+          true,
+        );
+        assert.equal(
+          JSON.parse(Buffer.from(body, "base64url").toString()).iss,
+          "123",
+        );
+        signed = true;
+        return Response.json({
+          token: "fixture-installation-token",
+          expires_at: new Date(Date.now() + 3600000).toISOString(),
+        }) as any;
+      }
+      return new Response("Fixture denies all other GitHub calls", {
+        status: 503,
+      }) as any;
+    },
+  });
+  try {
+    const response = await mf.dispatchFetch("https://app/admin/seed", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token },
+      body: JSON.stringify({
+        installation: 1,
+        repository: 2,
+        owner: "owner",
+        repo: "game",
+        player: 3,
+        confirmDisposable: true,
+        scenario: selectScenario(findPackage("forum", "0.1.0")),
+      }),
+    });
+    assert.equal(response.status, 202);
+    for (let i = 0; i < 40 && !signed; i++)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(signed, true, "durable alarm must execute JWT signing");
+    const status = await mf.dispatchFetch(
+      "https://app/admin/status?installation=1",
+      { headers: { Authorization: "Bearer " + token } },
+    );
+    assert.equal(((await status.json()) as any[]).length, 1);
+  } finally {
+    await mf.dispose();
+  }
+});

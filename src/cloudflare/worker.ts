@@ -2,7 +2,6 @@ import { launchRoute } from "./launch.ts";
 import { launchPage, launchScript } from "../launch-page.ts";
 import { catalog, findPackage, scenarioFor } from "../packages.ts";
 export { LaunchSession } from "./launch.ts";
-import { installationCandidates, startCandidate } from "../onboarding.ts";
 import { DurableObject } from "cloudflare:workers";
 import { createHash, timingSafeEqual, randomUUID } from "node:crypto";
 import { validSignature } from "../security.ts";
@@ -202,9 +201,7 @@ export default {
         }
         if (
           request.method === "POST" &&
-          ["/admin/seed", "/admin/retry", "/admin/resume"].includes(
-            url.pathname,
-          )
+          ["/admin/seed", "/admin/retry"].includes(url.pathname)
         ) {
           const input = JSON.parse(
             (await limitedBody(request, 16000)).toString(),
@@ -305,14 +302,12 @@ export class GameSession extends DurableObject<Env> {
         owner: input.owner,
         repo: input.repo,
         player: input.player,
+        scenario: input.scenario,
       });
-      if (input.scenario) {
-        try {
-          run.scenario = input.scenario;
-          scenarioFor(run);
-        } catch {
-          return new Response("Unknown scenario package", { status: 400 });
-        }
+      try {
+        scenarioFor(run);
+      } catch {
+        return new Response("Unknown scenario package", { status: 400 });
       }
       let duplicate = false;
       this.ctx.storage.transactionSync(() => {
@@ -334,24 +329,6 @@ export class GameSession extends DurableObject<Env> {
         { status: 202 },
       );
     }
-    if (path === "/resume") {
-      if (!Number.isSafeInteger(input.repository) || input.repository <= 0)
-        return new Response("Invalid repository", { status: 400 });
-      const run = this.store
-        .all()
-        .find((r) => r.repository === input.repository);
-      if (!run || run.phase !== "paused")
-        return new Response("No paused run for repository", { status: 409 });
-      try {
-        await this.game.resume(run);
-      } catch {
-        return new Response("Run could not be verified; remains paused", {
-          status: 409,
-        });
-      }
-      await this.ctx.storage.setAlarm(Date.now() + 100);
-      return Response.json({ status: "active", runId: run.id });
-    }
     if (path === "/retry") {
       this.store.db
         .prepare(
@@ -362,17 +339,6 @@ export class GameSession extends DurableObject<Env> {
       return Response.json({ status: "queued" });
     }
     if (path === "/enqueue") {
-      const candidates = installationCandidates(input.event, input.payload);
-      if (candidates.length) {
-        await this.ctx.storage.setAlarm(Date.now() + 100);
-        for (const candidate of candidates)
-          this.store.enqueue(
-            "auto-start:" + candidate.repository + ":" + input.id,
-            "auto-start",
-            JSON.stringify(candidate),
-          );
-      }
-      // Installation events can bootstrap a run; unrelated repository events cannot.
       if (!this.store.all().length) return new Response(null, { status: 202 });
       if (
         input.payload.repository &&
@@ -396,9 +362,7 @@ export class GameSession extends DurableObject<Env> {
     try {
       if (row) {
         try {
-          if (row.event === "auto-start") {
-            await startCandidate(this.game, JSON.parse(row.body));
-          } else if (row.event === "seed") {
+          if (row.event === "seed") {
             const run = this.store.get(JSON.parse(row.body).id);
             if (run.phase === "seeding") await this.game.seed(run);
           } else await this.game.process(row.event, JSON.parse(row.body));
@@ -420,7 +384,7 @@ export class GameSession extends DurableObject<Env> {
         }
       } else {
         for (const r of this.store.all())
-          if (["active", "finishing", "paused"].includes(r.phase))
+          if (["active", "finishing"].includes(r.phase))
             this.store.enqueue(
               "reconcile:" + r.id + ":" + Math.floor(Date.now() / 600000),
               "push",
@@ -441,9 +405,7 @@ export class GameSession extends DurableObject<Env> {
           Math.max(Date.now() + 100, pending.due),
         );
       else if (
-        this.store
-          .all()
-          .some((r) => ["active", "finishing", "paused"].includes(r.phase))
+        this.store.all().some((r) => ["active", "finishing"].includes(r.phase))
       )
         await this.ctx.storage.setAlarm(Date.now() + 600000);
     }

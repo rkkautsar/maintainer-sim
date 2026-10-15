@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { findPackage, selectScenario } from "../src/packages.ts";
 import { Game } from "../src/game.ts";
 import { Store } from "../src/store.ts";
-import { baseline, proposals } from "../src/scenario.ts";
+const pack = findPackage("forum", "0.1.0");
+const { baseline, proposals } = pack.stages[0];
 import { expectedFiles, initialRun } from "../src/engine.ts";
 import type { GitHub } from "../src/github.ts";
 import type { Run } from "../src/types.ts";
@@ -124,7 +125,7 @@ class Fake {
     this.refs[r.base ?? "main"] = sha;
   }
 }
-async function setup(selection?: Run["scenario"]) {
+async function setup(selection: Run["scenario"] = selectScenario(pack)) {
   const s = new Store(":memory:"),
     fake = new Fake(),
     game = new Game(s, async () => fake as unknown as GitHub);
@@ -135,6 +136,7 @@ async function setup(selection?: Run["scenario"]) {
     owner: "owner",
     repo: "game",
     player: 3,
+    scenario: selection,
   });
   if (selection) {
     r.scenario = selection;
@@ -164,11 +166,11 @@ test("seeding resumes with exact object counts and no duplicate creation", async
     s.save(r);
     await game.seed(r);
     assert.equal(fake.milestones.length, 1);
-    assert.equal(fake.issues.length, 4);
+    assert.equal(fake.issues.length, 6);
     assert.equal(r.master, 1);
-    assert.match(fake.issues[0].body, /Saturday launch/);
-    assert.match(fake.issues[0].body, /Incoming contributions/);
-    assert.equal(fake.prs.length, 6);
+    assert.match(fake.issues[0].body, /group chat/);
+    assert.match(fake.issues[0].body, /Contributions/);
+    assert.equal(fake.prs.length, 10);
     assert.equal(s.get("run").phase, "active");
   } finally {
     s.close();
@@ -179,15 +181,15 @@ test("authorized prepared revision updates same PR", async () => {
   try {
     await game.process(
       "issue_comment",
-      payload(r, `/game revise ${r.prs.c.number}`),
+      payload(r, `/game revise ${r.prs["comment-edit"].number}`),
     );
-    assert.equal(s.get("run").prs.c.revision, 1);
-    assert.equal(fake.prs.length, 6);
+    assert.equal(s.get("run").prs["comment-edit"].revision, 1);
+    assert.equal(fake.prs.length, 10);
     await game.process(
       "issue_comment",
-      payload(r, `/game revise ${r.prs.c.number}`),
+      payload(r, `/game revise ${r.prs["comment-edit"].number}`),
     );
-    assert.equal(s.get("run").prs.c.revision, 1);
+    assert.equal(s.get("run").prs["comment-edit"].revision, 1);
   } finally {
     s.close();
   }
@@ -237,9 +239,7 @@ test("unexpected source changes still allow finishing with partial assessment", 
     assert.equal(s.get("run").phase, "finished");
     assert.equal(s.get("run").result?.success, null);
     assert.deepEqual(s.get("run").result?.unverified, [
-      "likes",
-      "edit",
-      "page",
+      ...pack.stages[0].issues.map((i) => i.id),
     ]);
     assert.ok(fake.comments.some((c) => c.body.includes("partially assessed")));
   } finally {
@@ -249,10 +249,10 @@ test("unexpected source changes still allow finishing with partial assessment", 
 test("known authored merged content works regardless of commit identity", async () => {
   const { s, fake, game, r } = await setup();
   try {
-    fake.merge("a", r);
+    fake.merge("voting-simple", r);
     await game.process("pull_request", payload(r));
     assert.equal(s.get("run").phase, "active");
-    assert.equal(s.get("run").prs.a.outcome, "merged");
+    assert.equal(s.get("run").prs["voting-simple"].outcome, "merged");
   } finally {
     s.close();
   }
@@ -264,15 +264,15 @@ test("revision response loss recovers persisted intent", async () => {
     await assert.rejects(() =>
       game.process(
         "issue_comment",
-        payload(r, `/game revise ${r.prs.c.number}`),
+        payload(r, `/game revise ${r.prs["comment-edit"].number}`),
       ),
     );
-    assert.equal(s.get("run").prs.c.revision, 0);
+    assert.equal(s.get("run").prs["comment-edit"].revision, 0);
     await game.process(
       "issue_comment",
-      payload(r, `/game revise ${r.prs.c.number}`),
+      payload(r, `/game revise ${r.prs["comment-edit"].number}`),
     );
-    assert.equal(s.get("run").prs.c.revision, 1);
+    assert.equal(s.get("run").prs["comment-edit"].revision, 1);
     assert.equal(s.get("run").phase, "active");
   } finally {
     s.close();
@@ -296,24 +296,34 @@ test("complete winning session revises, merges, closes and debriefs automaticall
   try {
     await game.process(
       "issue_comment",
-      payload(r, `/game revise ${r.prs.c.number}`),
+      payload(r, `/game revise ${r.prs["comment-edit"].number}`),
     );
     await game.process(
       "issue_comment",
-      payload(r, `/game revise ${r.prs.d.number}`),
+      payload(r, `/game revise ${r.prs["pagination"].number}`),
+    );
+    await game.process(
+      "issue_comment",
+      payload(r, `/game revise ${r.prs.bookmarks.number}`),
     );
     const current = s.get("run");
-    for (const id of ["a", "c", "d", "e"]) {
+    for (const id of [
+      "voting-simple",
+      "comment-edit",
+      "pagination",
+      "bookmarks",
+      "search-simple",
+      "empty-state",
+    ]) {
       fake.merge(id, current);
       await game.process("pull_request", payload(r));
     }
-    fake.prs.find((p) => p.number === current.prs.b.number).state = "closed";
-    fake.prs.find((p) => p.number === current.prs.f.number).state = "closed";
+    for (const pr of fake.prs) if (!pr.merged) pr.state = "closed";
     await game.process("pull_request", payload(r));
     const finished = s.get("run");
     assert.equal(finished.phase, "finished");
     assert.equal(finished.result?.success, true);
-    assert.equal(finished.result?.points, 12);
+    assert.equal(finished.result?.points, 20);
     assert.equal(
       fake.comments.filter((c) => c.body.includes("Stage debrief")).length,
       1,
@@ -347,15 +357,15 @@ test("identified native request-changes review triggers revision and preserves f
       {
         id: 50,
         user: { id: r.player },
-        body: "actor is unchecked so anyone can edit another user post",
+        body: "The route trusts client authorId instead of stored comment.authorId, so another member can edit someone else’s comment.",
         state: "CHANGES_REQUESTED",
-        commit_id: r.prs.c.head,
+        commit_id: r.prs["comment-edit"].head,
         submitted_at: "2026-10-15T00:00:00Z",
       },
     ];
     await game.process("pull_request_review", payload(r));
-    assert.equal(s.get("run").prs.c.revision, 1);
-    assert.equal(s.get("run").findings.c[0].revision, 0);
+    assert.equal(s.get("run").prs["comment-edit"].revision, 1);
+    assert.equal(s.get("run").findings["comment-edit"][0].revision, 0);
     await game.process("issue_comment", payload(r, "/game finish"));
     assert.match(
       fake.comments.at(-1).body,
@@ -381,151 +391,53 @@ test("unavailable judge leaves revision command available without concern credit
         user: { id: r.player },
         body: "Please check ownership",
         state: "CHANGES_REQUESTED",
-        commit_id: r.prs.c.head,
+        commit_id: r.prs["comment-edit"].head,
         submitted_at: "2026-10-15T00:00:00Z",
       },
     ];
     await game.process("pull_request_review", payload(r));
-    assert.equal(s.get("run").prs.c.revision, 0);
+    assert.equal(s.get("run").prs["comment-edit"].revision, 0);
     await game.process(
       "issue_comment",
-      payload(r, `/game revise ${r.prs.c.number}`),
+      payload(r, `/game revise ${r.prs["comment-edit"].number}`),
     );
-    assert.equal(s.get("run").prs.c.revision, 1);
+    assert.equal(s.get("run").prs["comment-edit"].revision, 1);
     assert.deepEqual(s.get("run").findings, {});
   } finally {
     s.close();
   }
 });
 
-test("human exchanges are replay-safe and manual revisions do not imply concern credit", async () => {
+test("authored contributor exchanges are replay-safe without implying concern credit", async () => {
   const { s, fake, game, r } = await setup();
   try {
+    const proposal = proposals.find((p) => p.id === "pagination")!;
+    await game.process(
+      "issue_comment",
+      payload(r, `/game revise ${r.prs.pagination.number}`),
+    );
+    await game.process("push", payload(r));
     assert.equal(
-      fake.comments.filter((c) => c.body.includes("another neighborhood asked"))
+      fake.comments.filter((c) => c.body.includes(proposal.variants[1].reply!))
         .length,
       1,
     );
-    assert.equal(
-      fake.comments.filter((c) => c.body.includes("URL parameters")).length,
-      1,
-    );
-    await game.process(
-      "issue_comment",
-      payload(r, `/game revise ${r.prs.d.number}`),
-    );
-    await game.process("push", payload(r));
-    const replies = fake.comments.filter((c) =>
-      c.body.includes("The revised helper rejects non-integers"),
-    );
-    assert.equal(replies.length, 1);
-    assert.match(replies[0].body, /prepared revision you requested/);
-    assert.doesNotMatch(replies[0].body, /Thanks for identifying/);
+    assert.deepEqual(s.get(r.id).findings, {});
     await game.process("issue_comment", payload(r, "/game finish"));
-    assert.match(fake.comments.at(-1).body, /Community update/);
-    assert.match(fake.comments.at(-1).body, /clear handover/);
+    assert.match(fake.comments.at(-1).body, /Stage debrief/);
   } finally {
     s.close();
   }
 });
-
-test("installation onboarding seeds a matching fresh repository only once", async () => {
-  const { startCandidate } = await import("../src/onboarding.ts");
-  const s = new Store(":memory:"),
-    fake = new Fake(),
-    game = new Game(s, async () => fake as unknown as GitHub);
-  const candidate = {
-    installation: 1,
-    repository: 2,
-    owner: "owner",
-    repo: "game",
-    player: 3,
-  };
-  try {
-    await startCandidate(game, candidate);
-    await startCandidate(game, candidate);
-    assert.equal(s.all().length, 1);
-    assert.equal(s.all()[0].master, 1);
-    assert.equal(fake.prs.length, 6);
-  } finally {
-    s.close();
-  }
-});
-
-test("automatic onboarding leaves unrelated or nonempty repositories untouched", async () => {
-  const { startCandidate } = await import("../src/onboarding.ts");
-  for (const kind of ["unrelated", "nonempty"]) {
-    const s = new Store(":memory:"),
-      fake = new Fake(),
-      game = new Game(s, async () => fake as unknown as GitHub);
-    if (kind === "unrelated")
-      fake.files.baseline = { "README.md": "Different project" };
-    else fake.issues.push({ number: 1, body: "Existing work" });
-    try {
-      await startCandidate(game, {
-        installation: 1,
-        repository: 2,
-        owner: "owner",
-        repo: "game",
-        player: 3,
-      });
-      assert.equal(s.all().length, 0);
-      assert.equal(fake.milestones.length, 0);
-      assert.equal(fake.prs.length, 0);
-    } finally {
-      s.close();
-    }
-  }
-});
-
-test("existing run pins its validated baseline across template changes", async () => {
-  const { s, fake, game, r } = await setup();
-  try {
-    // Model an older run created before baseline snapshots were persisted.
-    delete r.baselineFiles;
-    fake.files.baseline["README.md"] = "Previous template documentation";
-    s.save(r);
-    await game.reconcile(r, fake as unknown as GitHub);
-    assert.equal(
-      s.get(r.id).baselineFiles?.["README.md"],
-      "Previous template documentation",
-    );
-    assert.equal(
-      expectedFiles(s.get(r.id))["README.md"],
-      "Previous template documentation",
-    );
-    assert.equal(s.get(r.id).phase, "active");
-  } finally {
-    s.close();
-  }
-});
-test("legacy paused runs resume with partial scoring for unsupported edits", async () => {
-  const { s, fake, game, r } = await setup();
-  try {
-    r.phase = "paused";
-    r.reason = "Unexpected default-branch edits or reversion";
-    s.save(r);
-    fake.files.changed = { ...fake.files.baseline, "unexpected.ts": "bad" };
-    fake.refs.main = "changed";
-    await game.resume(r);
-    assert.deepEqual(s.get(r.id).unverifiedIssues, ["likes", "edit", "page"]);
-    assert.equal(s.get(r.id).phase, "active");
-    assert.equal(s.get(r.id).reason, undefined);
-    await assert.rejects(game.resume(r), /Only paused/);
-  } finally {
-    s.close();
-  }
-});
-
 test("a merge during reconciliation retries instead of pausing the run", async () => {
   const { s, fake, game, r } = await setup();
   try {
     const get = fake.get.bind(fake);
     let merged = false;
     fake.get = async (path: string) => {
-      if (!merged && path.endsWith("/pulls/" + r.prs.a.number)) {
+      if (!merged && path.endsWith("/pulls/" + r.prs["voting-simple"].number)) {
         merged = true;
-        fake.merge("a", r);
+        fake.merge("voting-simple", r);
       }
       return get(path);
     };
@@ -536,7 +448,7 @@ test("a merge during reconciliation retries instead of pausing the run", async (
     assert.equal(s.get(r.id).phase, "active");
     await game.process("push", payload(r));
     assert.equal(s.get(r.id).phase, "active");
-    assert.equal(s.get(r.id).prs.a.outcome, "merged");
+    assert.equal(s.get(r.id).prs["voting-simple"].outcome, "merged");
   } finally {
     s.close();
   }
@@ -553,11 +465,11 @@ test("edited PR is unscored, not judged or overwritten, and stage finishes once"
         return "identified";
       },
     };
-    const pr = fake.prs.find((p) => p.number === r.prs.c.number);
+    const pr = fake.prs.find((p) => p.number === r.prs["comment-edit"].number);
     pr.head.sha = "external-edit";
     fake.files[pr.head.sha] = {
       ...baseline,
-      "src/edit.ts": "custom implementation",
+      "features/comment-edit.ts": "custom implementation",
     };
     fake.reviews = [
       {
@@ -574,9 +486,12 @@ test("edited PR is unscored, not judged or overwritten, and stage finishes once"
       payload(r, `/game revise ${pr.number}`),
     );
     assert.equal(s.get(r.id).phase, "active");
-    assert.ok(s.get(r.id).prs.c.unscored);
-    assert.equal(fake.refs[`game/${r.id}/c`], r.prs.c.head);
-    assert.equal(s.get(r.id).prs.c.revision, 0);
+    assert.ok(s.get(r.id).prs["comment-edit"].unscored);
+    assert.equal(
+      fake.refs[`game/${r.id}/comment-edit`],
+      r.prs["comment-edit"].head,
+    );
+    assert.equal(s.get(r.id).prs["comment-edit"].revision, 0);
     assert.equal(judgeCalls, 0);
     pr.merged = true;
     pr.state = "closed";
@@ -586,10 +501,13 @@ test("edited PR is unscored, not judged or overwritten, and stage finishes once"
     await game.process("pull_request", payload(r));
     const result = s.get(r.id).result!;
     assert.equal(s.get(r.id).phase, "finished");
-    assert.equal(result.decisions.find((d) => d.id === "c")?.points, null);
-    assert.equal(result.maximum, 10);
+    assert.equal(
+      result.decisions.find((d) => d.id === "comment-edit")?.points,
+      null,
+    );
+    assert.equal(result.maximum, 18);
     assert.equal(result.success, null);
-    assert.ok(result.unverified?.includes("edit"));
+    assert.ok(result.unverified?.includes("edit-comments"));
     assert.equal(
       fake.comments.filter((c) => c.body.includes("Stage debrief")).length,
       1,
@@ -601,17 +519,23 @@ test("edited PR is unscored, not judged or overwritten, and stage finishes once"
 test("both competing merges finish with unscored alternatives, not a pause", async () => {
   const { s, fake, game, r } = await setup();
   try {
-    fake.merge("a", r);
-    fake.merge("b", r);
+    fake.merge("voting-simple", r);
+    fake.merge("voting-framework", r);
     for (const pr of fake.prs) pr.state = "closed";
     await game.process("pull_request", payload(r));
     const result = s.get(r.id).result!;
     assert.equal(s.get(r.id).phase, "finished");
     assert.equal(result.success, null);
-    assert.ok(result.unverified?.includes("likes"));
-    assert.equal(result.decisions.find((d) => d.id === "a")?.points, null);
-    assert.equal(result.decisions.find((d) => d.id === "b")?.points, null);
-    assert.equal(result.maximum, 8);
+    assert.ok(result.unverified?.includes("voting"));
+    assert.equal(
+      result.decisions.find((d) => d.id === "voting-simple")?.points,
+      null,
+    );
+    assert.equal(
+      result.decisions.find((d) => d.id === "voting-framework")?.points,
+      null,
+    );
+    assert.equal(result.maximum, 16);
   } finally {
     s.close();
   }
@@ -619,12 +543,12 @@ test("both competing merges finish with unscored alternatives, not a pause", asy
 test("documentation changes do not invalidate known milestone contributions", async () => {
   const { s, fake, game, r } = await setup();
   try {
-    fake.merge("a", r);
+    fake.merge("voting-simple", r);
     fake.files.final["README.md"] = "Player notes";
     await game.process("push", payload(r));
     const current = s.get(r.id);
     assert.equal(current.phase, "active");
-    assert.equal(current.prs.a.unscored, undefined);
+    assert.equal(current.prs["voting-simple"].unscored, undefined);
     assert.deepEqual(current.unverifiedIssues, []);
     assert.ok(current.warnings?.length);
   } finally {
@@ -674,24 +598,10 @@ test("repository access restoration resumes processing and preserves finished re
     s.close();
   }
 });
-test("older paused runs automatically recover on the next delivery", async () => {
-  const { s, game, r } = await setup();
-  try {
-    r.phase = "paused";
-    r.reason = "Old content check";
-    s.save(r);
-    await game.process("issue_comment", payload(r, "/game finish"));
-    assert.equal(s.get(r.id).phase, "finished");
-    assert.equal(s.get(r.id).reason, undefined);
-  } finally {
-    s.close();
-  }
-});
-
 test("repository comparison limits produce a partial debrief without blocking finish", async () => {
   const { s, fake, game, r } = await setup();
   try {
-    fake.merge("a", r);
+    fake.merge("voting-simple", r);
     fake.tree = async () => {
       throw new Error("Unsupported file type");
     };
@@ -701,7 +611,7 @@ test("repository comparison limits produce a partial debrief without blocking fi
     assert.equal(finished.phase, "finished");
     assert.equal(finished.result?.success, null);
     assert.equal(
-      finished.result?.decisions.find((d) => d.id === "a")?.points,
+      finished.result?.decisions.find((d) => d.id === "voting-simple")?.points,
       null,
     );
     assert.ok(

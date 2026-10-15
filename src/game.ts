@@ -1,6 +1,5 @@
 import {
   storyBody,
-  stageTitle,
   contributorNote,
   followup,
   revisionReply,
@@ -72,7 +71,7 @@ export class Game {
       const ref = await gh.get(root + "/git/ref/heads/" + r.base);
       if (!equal(await gh.tree(root, ref.object.sha), baseline))
         throw new Error(
-          "Target does not exactly match scenario/public baseline",
+          "Target does not exactly match selected scenario baseline",
         );
       if ((await gh.list(root + "/issues?state=all")).length)
         throw new Error("Start in a fresh repository without issues or PRs");
@@ -204,15 +203,6 @@ export class Game {
       r.baselineFiles = await gh.tree(this.root(r), r.baseline);
       this.store.save(r);
     }
-  }
-  async resume(r: Run) {
-    if (r.phase !== "paused") throw new Error("Only paused runs can resume");
-    const gh = await this.connect(r);
-    await this.recoverRevision(r, gh);
-    await this.reconcile(r, gh);
-    r.phase = "active";
-    delete r.reason;
-    this.store.save(r);
   }
   async reconcile(r: Run, gh: GitHub) {
     const { baseline, issues, proposals, pack, title } = scenarioFor(r);
@@ -627,12 +617,6 @@ export class Game {
       if (r.phase === "inaccessible" && accessRestored) {
         r.phase = r.phaseBeforeAccessLoss ?? "active";
         delete r.phaseBeforeAccessLoss;
-        this.store.save(r);
-      }
-      // Migrate older paused runs on their next delivery/reconciliation.
-      if (r.phase === "paused") {
-        r.phase = "active";
-        delete r.reason;
         this.store.save(r);
       }
       if (

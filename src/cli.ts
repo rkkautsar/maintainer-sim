@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
 import { Store } from "./store.ts";
 import { Game } from "./game.ts";
 import { initialRun, assess, debrief } from "./engine.ts";
-import { baseline, proposals } from "./scenario.ts";
+import {
+  catalog,
+  findPackage,
+  selectScenario,
+  scenarioFor,
+} from "./packages.ts";
 import { server } from "./server.ts";
 const [cmd, ...args] = process.argv.slice(2);
 function demo() {
+  const pack = catalog()[0];
   const run = initialRun({
     id: "demo",
     installation: 1,
@@ -15,43 +19,28 @@ function demo() {
     owner: "local",
     repo: "demo",
     player: 1,
+    scenario: selectScenario(pack),
   });
   run.phase = "active";
-  for (const [i, p] of proposals.entries())
+  const delivered = new Set<string>();
+  for (const [i, p] of scenarioFor(run).proposals.entries()) {
+    const revision = p.variants.findIndex((v) => v.sound);
+    const merge = revision >= 0 && (!p.issue || !delivered.has(p.issue));
+    if (merge && p.issue) delivered.add(p.issue);
     run.prs[p.id] = {
       number: i + 1,
-      revision: ["c", "d"].includes(p.id) ? 1 : 0,
-      outcome: ["a", "c", "d", "e"].includes(p.id) ? "merged" : "closed",
+      revision: Math.max(0, revision),
+      outcome: merge ? "merged" : "closed",
       head: "fixture",
       reviews: [],
     };
+  }
   run.result = assess(run);
   console.log(debrief(run));
 }
 async function main() {
-  if (cmd === "board") {
-    const { createBoardServer } =
-      await import("../scenario/public/src/server.ts");
-    const app = createBoardServer();
-    app.listen(3001, "127.0.0.1", () =>
-      console.log("Pocket Board: http://localhost:3001"),
-    );
-    return;
-  }
   if (cmd === "demo") {
     demo();
-    return;
-  }
-  if (cmd === "export-template") {
-    const dest = args[0];
-    if (!dest) throw new Error("Provide an empty destination directory");
-    if (existsSync(dest)) throw new Error("Destination must not exist");
-    mkdirSync(dest, { recursive: true });
-    for (const [file, content] of Object.entries(baseline)) {
-      mkdirSync(join(dest, file, ".."), { recursive: true });
-      writeFileSync(join(dest, file), content);
-    }
-    console.log("Template exported to " + dest);
     return;
   }
   const store = new Store(process.env.DATABASE_PATH),
@@ -74,15 +63,26 @@ async function main() {
   }
   try {
     if (cmd === "seed") {
-      const [installation, repository, owner, repo, player] = args;
+      const [
+        installation,
+        repository,
+        owner,
+        repo,
+        player,
+        scenario,
+        version,
+        stage,
+      ] = args;
       if (
         ![installation, repository, player].every(
           (x) => /^\d+$/.test(x ?? "") && Number(x) > 0,
         ) ||
+        !scenario ||
+        !version ||
         ![owner, repo].every((x) => /^[A-Za-z0-9_.-]+$/.test(x ?? ""))
       )
         throw new Error(
-          "Usage: seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_ID",
+          "Usage: seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_ID SCENARIO VERSION [STAGE]",
         );
       if (process.env.DISPOSABLE_REPO_CONFIRMED !== "true")
         throw new Error(
@@ -99,6 +99,7 @@ async function main() {
         owner,
         repo,
         player: Number(player),
+        scenario: selectScenario(findPackage(scenario, version), stage),
       });
       store.save(run);
       console.log("Run " + run.id);
@@ -109,7 +110,6 @@ async function main() {
       if (run.phase === "seeding") await game.seed(run);
       else if (run.phase === "finishing")
         await game.publish(run, await game.connect(run));
-      else if (run.phase === "paused") await game.resume(run);
       else throw new Error("Run is not interrupted");
     } else if (cmd === "status") {
       console.log(JSON.stringify(store.all(), null, 2));
@@ -122,7 +122,7 @@ async function main() {
       console.log("Failed deliveries queued");
     } else
       throw new Error(
-        "Commands: demo, export-template DIR, seed INSTALLATION REPOSITORY OWNER REPO PLAYER, resume RUN_ID, status, retry-deliveries, serve",
+        "Commands: demo, seed INSTALLATION REPOSITORY OWNER REPO PLAYER SCENARIO VERSION [STAGE], resume RUN_ID, status, retry-deliveries, serve",
       );
   } finally {
     store.close();

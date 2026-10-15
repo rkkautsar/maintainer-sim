@@ -1,6 +1,6 @@
 export type Outcome = "open" | "merged" | "closed";
 export type Phase =
-  "seeding" | "active" | "paused" | "finishing" | "finished" | "inaccessible";
+  "seeding" | "active" | "finishing" | "finished" | "inaccessible";
 export type PRState = {
   number: number;
   revision: number;
@@ -30,7 +30,7 @@ export type Run = {
   repo: string;
   player: number;
   phase: Phase;
-  scenario?: { id: string; version: string; stage: string; digest: string };
+  scenario: { id: string; version: string; stage: string; digest: string };
   previousRun?: string;
   reason?: string;
   phaseBeforeAccessLoss?: Phase;
