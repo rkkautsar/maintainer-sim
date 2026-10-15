@@ -75,7 +75,11 @@ Run `npm run scenario` for all commands and arguments. The Worker build bundles 
 
 Roadmap progress and merge/close outcomes use the authored rubric. The debrief explains accepted defects, maintenance debt, and missed requirements. Review effort is informational. Without a calibrated judge, review wording is explicitly unassessed; requesting a revision alone does not earn concern-identification credit.
 
-See [Jev setup and calibration](docs/JUDGE.md) to run the labelled review trial. Optional Jev matching can assess review text against a curated concern. The deployed trial is enabled after the labelled Forum calibration; new environments should keep it disabled until their calibration passes. Enabling it requires credentials, configured pricing, and `JEV_CALIBRATED=true` after calibration. Requests use bounded context, cached results, and atomic budget reservations. The configured shared cap is **$1 per UTC day**, across all players. At the cap or on judge failure, deterministic outcomes and debriefs continue; review wording remains unassessed. There is no live AI code generation in this version.
+The deployed trial uses **Cloudflare Clef-flash** to match review text to curated concerns. Read [judge configuration and calibration](docs/JUDGE.md) for the measured results and limitations. A matching request-changes review can trigger its prepared revision; `/game revise <PR-number>` remains available when matching abstains.
+
+Optional review coaching appears in the stage debrief: clarity and constructiveness, substantive concerns, subjective nits, and possible formatter/lint candidates. It is advisory and has no effect on points, concern credit, prepared revisions or release success. It covers submitted GitHub reviews and their attached inline comments, with at most four coaching attempts per PR. Uncertain dimensions are omitted.
+
+All judge and coaching calls use bounded context, cached results and atomic reservations against the shared **$1 per UTC day** inference cap. At the cap or on model failure, deterministic outcomes and debriefs continue. Clef-flash uses the existing Workers AI binding and standard billing, eligible for the shared daily Neuron allowance. The cap conservatively counts list-price usage before that free allowance. There is no live AI code generation in this version.
 
 ## Operator commands
 

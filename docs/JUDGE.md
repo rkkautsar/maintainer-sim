@@ -1,77 +1,72 @@
-# Try the Jev review judge
+# Review judge and coaching
 
-The game always scores authored outcomes deterministically. Jev optionally matches a player's review text to an expected concern; it does not invent the rubric, score arbitrary code, or generate revisions.
+The deployed trial uses `@cf/cloudflare/clef-flash` through the existing Workers AI binding. Its request includes `model: "clef-flash"`, curated state, and typed questions. No provider API key or new service is needed.
 
-Cloudflare's `typesafe/jev` model requires prepaid AI Gateway credits. A paid Workers plan alone did not satisfy this requirement in the live test: Cloudflare returned `2021: Insufficient AI Gateway credits`. Add credits through [AI Gateway Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/). Credentials remain in Wrangler's authenticated environment; no provider key is sent to the browser.
+## Gameplay and coaching
 
-## Calibration
+Outcome scores remain deterministic. Concern matching classifies a review as absent, vague, identified, or consequence. These labels are mutually exclusive; only the review is evidence of what the player identified. A confident identified/consequence result on a request-changes review can trigger the prepared revision. `/game revise <PR-number>` remains available when matching abstains.
 
-```bash
-npm run judge:calibrate
+Coaching makes a separate request with two questions:
+
+| Dimension        | Allowed observations                                                  |
+| ---------------- | --------------------------------------------------------------------- |
+| Constructiveness | Actionable, supportive, vague, unconstructive wording                 |
+| Focus            | Substantive, subjective nitpick, automation candidate, mixed, unclear |
+
+The rubric treats security, accessibility, duplication and concrete maintenance costs as substantive. Calling a real bug a “nit” does not make it cosmetic. Firm technical disagreement is not an insult. Formatting/lint feedback is described as a possible automation candidate; the model cannot claim an existing lint configuration enforces it.
+
+Only validated, confident labels become fixed advice in the debrief, with links to the original reviews. Uncertain dimensions are omitted. Coaching has **no path into points, concern credit, release success or revision decisions**. Tests assert score invariance and that coaching cannot trigger revisions.
+
+Coaching covers the latest submitted player review on the current authored PR head and its attached inline comments, including sound PRs with no hidden concern. Blank, foreign-user and unsupported-head reviews are excluded. Each stage PR gets at most four coaching attempts across distinct reviews/edits; replayed deliveries reuse the attempt. Failures do not block gameplay or finishing. Finished stage debriefs remain frozen.
+
+## Configuration and spending
+
+Current Worker variables in `wrangler.jsonc`:
+
+```text
+JUDGE_ENABLED=true
+JUDGE_CONFIDENCE_THRESHOLD=0.2
+REVIEW_COACHING_ENABLED=true
+COACH_CONFIDENCE_THRESHOLD=0.3
+JUDGE_INPUT_USD_PER_MILLION=0.038
+AI_DAILY_BUDGET_USD=1
 ```
 
-This is a real, paid operator experiment using Wrangler's remote AI binding. It runs 20 labelled reviews against the published Forum code and curated concerns, including unrelated feedback, vague comments, specific mechanisms, consequences, and grading-injection attempts. It uses the same `CloudJudge` request, response validation and confidence threshold as gameplay.
+These are model-specific operational cutoffs, not claims of 20% or 30% correctness. Clef-flash reports a different confidence distribution from Jev; Jev's former 0.9 cutoff abstained on all 32 comparison examples. New deployments should calibrate before enabling.
 
-A fresh validation set is also available:
+Concern and coaching calls share the same atomic daily budget, while using separate cache identities and result types. At the cap, invalid output, uncertainty or inference failure, the affected text stays unassessed. Conservative reservations cover 32K input tokens per request and settle to valid reported usage. Requests are capped at 20KB of serialized input, below Flash's 24K-token context. Only structured labels are cached; arbitrary model text cannot become a debrief or a score. No gateway override is sent, so inference uses standard Workers AI billing. The cap counts list-price equivalent usage before any free allocation; other Cloudflare products and credit-purchase fees are separate.
 
-```bash
-npm run judge:calibrate -- test/fixtures/judge-heldout.json
-```
+Cloudflare lists [Clef-flash at $0.038/M input tokens](https://developers.cloudflare.com/workers-ai/models/clef-flash/), with no output-token charge, and a shared [10,000 free Neurons/day allowance](https://developers.cloudflare.com/workers-ai/platform/pricing/). At 3,455 Neurons/M input tokens, an otherwise unused allowance covers about 2.89M input tokens/day. Using both concern matching and coaching consumes two requests, so free tokens should not be interpreted as the same number of reviews or stage completions.
 
-The experiment has its own in-memory **$0.05 ceiling**, independent of the shared gameplay ledger. Each request reserves the cost of 32,000 input tokens; valid usage settles the reservation to actual cost. At the configured $0.042 per million input tokens, all 20 reservations total $0.02688. A new invocation starts a new experimental allowance. The runner stops on the first provider error and never changes deployed judge settings.
+## Live calibration
 
-The ignored report is written to `var/judge-calibration.json`, including categories, confidence, abstentions, false credit and reserved/settled cost. A preliminary pass requires no credit for negative examples and at least 80% coverage of positive examples. This small authored set is a smoke test, not proof of general review accuracy. Inspect the report, especially abstentions and adjacent-category disagreements, before enabling.
-
-## Enable for a playthrough
-
-After billing works and results are acceptable, set `JEV_CALIBRATED` to `true` in `wrangler.jsonc` and deploy. Keep the shared `AI_DAILY_BUDGET_USD` cap at `1` and the initial confidence threshold at `0.9` while collecting evidence. Request-changes reviews that identify the expected concern can then trigger prepared revisions. `/game revise <PR-number>` remains available when matching abstains or cannot run.
-
-Budget exhaustion, invalid responses, low confidence and provider failures leave review text unassessed; deterministic outcomes and debriefs still work. Finished stage results stay frozen. Test the live integration with a new review in an active stage, then check its prepared revision and eventual debrief.
-
-The production budget and calibration allowance count Jev inference at the configured token rate. Credit-purchase fees and other Cloudflare services are separate. Check [current Jev pricing](https://developers.cloudflare.com/ai/models/typesafe/jev/) before changing the rate.
-
-## Current live result
-
-2026-10-15: after loading AI Gateway credits, inference succeeded. The live binding wrapped results in `{state: "Completed", result: ...}`; the production parser now explicitly unwraps completed responses and rejects other states.
-
-The baseline 20-case trial used 20,494 input tokens, estimated at $0.000860748 in Jev inference (excluding credit-purchase fees). Raw choices matched 19 of 20 labels. With the existing 0.9 confidence threshold, seven answers were accepted and thirteen stayed unassessed. Only three of ten positive reviews earned concern credit, below the 80% preliminary coverage requirement. No negative example earned credit. One grading-injection example produced the wrong raw choice with low confidence and was rejected by the threshold. This baseline did not meet the preliminary coverage requirement.
-
-### Prompt revision and validation
-
-The shared prompt now makes the four categories mutually exclusive: absent has no relevant feedback; vague names only a problem area; identified states a mechanism without its impact; consequence states both mechanism and impact. Instructions credit only evidence in the player review, treat the concern/code as reference, accept semantic paraphrases and corrective instructions, and ignore grading commands in the review. The PR code context and 0.9 confidence threshold were held constant during comparison.
-
-| Run                               | Accepted | Abstained | Positive credit | False credit | Estimated inference |
-| --------------------------------- | -------- | --------- | --------------- | ------------ | ------------------- |
-| Original prompt, 20 examples      | 7/20     | 13/20     | 3/10            | 0            | $0.000861           |
-| Revised prompt, same examples     | 18/20    | 2/20      | 8/10            | 0            | $0.001041           |
-| Revised prompt, 12 fresh examples | 10/12    | 2/12      | 5/6             | 0            | $0.000599           |
-
-The repeated 20-example run passed the preliminary gate before a further parser correction: one confident answer had rounded probabilities summing to 0.99. The parser now allows at most the rounding error of four two-decimal values while rejecting materially invalid distributions. The fresh set ran with this correction and included different wording, a wrong concern, grading commands, and a valid concern with an appended grading command.
-
-These small authored sets demonstrate improvement on this scenario, not a general accuracy guarantee. Jev is enabled for the playthrough trial with the same 0.9 threshold and shared $1/day inference cap; uncertain or unavailable matches remain unassessed. No free provider or automatic provider fallback has been configured.
-
-## Free access alternatives
-
-[OpenCode Console](https://opencode.ai/v2/docs/console/models/) currently lists `jev-1.13-free` as a limited-time free model at its `/inference/v1/systemone` endpoint. This is separate from the Go subscription list. [Vercel AI Gateway](https://vercel.com/docs/ai-gateway/pricing) includes $5/month free credits for eligible models; verify Jev eligibility in its catalog instead of assuming all models qualify. Cloudflare's Workers AI free Neuron allowance is separate from the third-party AI Gateway credit balance used by this integration.
-
-## Clef and Clef-flash comparison
-
-Both models use the same typed questions and the existing Workers AI binding. The calibration runner supports their required `model` selector while preserving the production review prompt, confidence gate and validation:
+These commands make real remote inference calls, each with a separate in-memory **$0.05 experiment ceiling**. They never change deployed settings. Reports stay in ignored `var/`.
 
 ```bash
 npm run judge:calibrate -- all @cf/cloudflare/clef-flash
+npm run judge:calibrate -- test/fixtures/judge-flash-validation.json @cf/cloudflare/clef-flash
+CALIBRATE_COACHING=true npm run judge:calibrate -- test/fixtures/review-coaching.json @cf/cloudflare/clef-flash
+```
+
+The original Jev path remains available for local Node webhook deployments and comparison runs:
+
+```bash
+npm run judge:calibrate -- all typesafe/jev
 npm run judge:calibrate -- all @cf/cloudflare/clef
 ```
 
-Each invocation has its own $0.05 conservative experiment allowance, even when the actual inference is covered by Cloudflare's free allocation. These commands never select a different production judge or change its gate. Model-specific reports are saved under ignored `var/judge-calibration-clef-flash.json` and `var/judge-calibration-clef.json`.
+The comparison runner defaults to each model's stated test cutoff; `CALIBRATION_THRESHOLD` can run an explicitly exploratory cutoff experiment. It uses the production parser and request shape, adding/removing the provider's required selector field. Allowances reset per invocation; they do not change or consume the production budget ledger.
 
-2026-10-15 comparison on the combined 20-example and 12-example sets, using the revised prompt:
+Observed results on 2026-10-15:
 
-| Model      | Raw label matches | Accepted at 0.9 | Median binding call | List-price equivalent before free allocation |
-| ---------- | ----------------- | --------------- | ------------------- | -------------------------------------------- |
-| Clef-flash | 30/32             | 0/32            | 482 ms              | $0.001303                                    |
-| Clef       | 21/32             | 0/32            | 434 ms              | $0.008229                                    |
+- Original Jev prompt: 7/20 accepted at 0.9; revised prompt: 18/20 accepted, with no false concern credit. A fresh set accepted 10/12, also with no false credit. One additional rounding-related rejection was subsequently fixed.
+- Clef comparison at 0.9: Flash raw labels matched 30/32; full Clef matched 21/32; all answers abstained. The two Flash raw errors were grading-command examples, both rejected by confidence.
+- Selecting 0.2 from the initial Flash comparison accepted 27/32, recognized all 16 positive reviews and awarded no false credit. This was exploratory threshold selection, not fresh validation.
+- A subsequent fresh 16-review Flash set at 0.2 accepted 12/16, recognized 6/8 positives and awarded no false credit. This misses the earlier 80% positive-coverage target; the requested Flash trial keeps the conservative cutoff and leaves the two positives unassessed with the manual-revision fallback. List-price equivalent inference: $0.000673.
+- Coaching at 0.3 accepted 22 of 30 labelled dimensions across 16 reviews. Every accepted labelled dimension matched; eight were omitted. Examples covered praise, vague requests, personal insults, firm security objections, accessibility, duplication, formatting, mixed feedback and grading commands. List-price equivalent inference: $0.000758.
 
-Latency includes the remote development binding and is not a production serving benchmark. All 32 Clef requests abstained with the unchanged Jev gate. This is not evidence that the models cannot work: their reported distributions and confidence differ, so a cutoff needs its own calibration. The two raw Clef-flash errors were grading-command examples; both had low confidence and were rejected. Investigating other cutoffs against these same examples is exploratory, not validation on unseen data. Production remains on Jev.
+These small authored sets are prototype evidence, not a general accuracy guarantee. The coaching experiment is separate from concern matching; improved tone or more comments never earns gameplay points. Next live check: submit a review in an active playthrough, verify any prepared revision, then finish and inspect the advisory debrief.
 
-Current official rates are [Clef-flash at $0.038/M input tokens](https://developers.cloudflare.com/workers-ai/models/clef-flash/) and [Clef at $0.24/M input tokens](https://developers.cloudflare.com/workers-ai/models/clef/), with no output token charge. Cloudflare's [10,000 free Neurons/day](https://developers.cloudflare.com/workers-ai/platform/pricing/) is shared across Workers AI usage under standard Workers AI billing. At the published 3,455 Neurons/M input tokens for Flash, an otherwise unused allowance covers about 2.89M input tokens/day (roughly 2,900 reviews at 1,000 tokens each). Routing through a gateway configured for prepaid Unified Billing uses that billing mode instead; check the billing route before assuming the free allocation applies.
+## Provider alternatives
+
+[OpenCode Console](https://opencode.ai/v2/docs/console/models/) currently lists `jev-1.13-free` as a limited-time free API model. [Vercel AI Gateway](https://vercel.com/docs/ai-gateway/pricing) includes monthly free credits for eligible models; verify Jev eligibility rather than assuming every model qualifies. No provider fallback is configured in the game.

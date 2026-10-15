@@ -11,9 +11,11 @@ export interface Env {
   GITHUB_PRIVATE_KEY: string;
   WEBHOOK_SECRET: string;
   ADMIN_TOKEN: string;
-  JEV_CALIBRATED: string;
-  JEV_CONFIDENCE_THRESHOLD: string;
-  JEV_INPUT_USD_PER_MILLION: string;
+  JUDGE_ENABLED: string;
+  REVIEW_COACHING_ENABLED?: string;
+  COACH_CONFIDENCE_THRESHOLD?: string;
+  JUDGE_CONFIDENCE_THRESHOLD: string;
+  JUDGE_INPUT_USD_PER_MILLION: string;
   AI_DAILY_BUDGET_USD: string;
   AI_GATEWAY_ID?: string;
 }

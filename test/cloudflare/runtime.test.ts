@@ -24,10 +24,10 @@ function runtime(extra: any = {}) {
       WEBHOOK_SECRET: "secret",
       GITHUB_APP_ID: "123",
       GITHUB_PRIVATE_KEY: "invalid-test-key",
-      JEV_CALIBRATED: "false",
-      JEV_INPUT_USD_PER_MILLION: "31.25",
+      JUDGE_ENABLED: "false",
+      JUDGE_INPUT_USD_PER_MILLION: "31.25",
       AI_DAILY_BUDGET_USD: "2",
-      JEV_CONFIDENCE_THRESHOLD: "0.9",
+      JUDGE_CONFIDENCE_THRESHOLD: "0.9",
     },
     outboundService: async () =>
       new Response("External calls disabled", { status: 503 }) as any,
@@ -217,10 +217,10 @@ test("actual workerd alarm signs GitHub App JWT for a packaged seed", async () =
       WEBHOOK_SECRET: "secret",
       GITHUB_APP_ID: "123",
       GITHUB_PRIVATE_KEY: pem,
-      JEV_CALIBRATED: "false",
-      JEV_INPUT_USD_PER_MILLION: "0.042",
+      JUDGE_ENABLED: "false",
+      JUDGE_INPUT_USD_PER_MILLION: "0.042",
       AI_DAILY_BUDGET_USD: "1",
-      JEV_CONFIDENCE_THRESHOLD: "0.9",
+      JUDGE_CONFIDENCE_THRESHOLD: "0.9",
     },
     outboundService: async (request: any) => {
       if (
@@ -277,6 +277,63 @@ test("actual workerd alarm signs GitHub App JWT for a packaged seed", async () =
       { headers: { Authorization: "Bearer " + token } },
     );
     assert.equal(((await status.json()) as any[]).length, 1);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("shared budget caches only validated coaching tags", async () => {
+  const mf = runtime();
+  try {
+    const ns = await mf.getDurableObjectNamespace("BUDGET");
+    const stub = ns.get(ns.idFromName("coaching-budget"));
+    const call = (body: any) =>
+      stub.fetch("https://budget", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    const key = "c".repeat(64);
+    assert.equal(
+      ((await (await call({ action: "claim", key })).json()) as any).claimed,
+      true,
+    );
+    assert.equal(
+      (
+        await call({
+          action: "complete",
+          key,
+          result: "coach-v1:actionable:automation",
+          inputTokens: 600,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      ((await (await call({ action: "claim", key })).json()) as any).result,
+      "coach-v1:actionable:automation",
+    );
+    assert.equal(
+      (
+        await call({
+          action: "complete",
+          key,
+          result: "coach-v1:perfect:award-points",
+          inputTokens: 600,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await call({
+          action: "complete",
+          key,
+          result: { points: 100 },
+          inputTokens: 600,
+        })
+      ).status,
+      400,
+    );
   } finally {
     await mf.dispose();
   }

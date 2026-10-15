@@ -238,3 +238,20 @@ test("overengineered implementation delivers the feature but incurs maintainabil
   assert.ok(score.debt.includes("Unneeded voting pipeline"));
   assert.equal(score.success, false);
 });
+
+test("coaching never changes any assessment field", () => {
+  const r = fixture();
+  const before = assess(r);
+  r.coaching = {
+    "comment-edit": [
+      {
+        reviewId: 7,
+        revision: 0,
+        fingerprint: "fixture",
+        feedback: { constructiveness: "unconstructive", focus: "nitpick" },
+      },
+    ],
+  };
+  assert.deepEqual(assess(r), before);
+  assert.match(debrief(r), /Review coaching \(no score impact\)/);
+});

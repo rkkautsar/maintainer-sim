@@ -6,3 +6,7 @@ ADMIN_TOKEN="REPLACE_WITH_AT_LEAST_32_RANDOM_CHARACTERS"
 GITHUB_CLIENT_ID=""
 GITHUB_CLIENT_SECRET=""
 PUBLIC_ORIGIN="http://localhost:8787"
+
+# Local Wrangler runs can reach paid AI resources. Opt in after calibration.
+JUDGE_ENABLED="false"
+REVIEW_COACHING_ENABLED="false"

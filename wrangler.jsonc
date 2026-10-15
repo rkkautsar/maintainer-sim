@@ -42,9 +42,11 @@
     "binding": "AI"
   },
   "vars": {
-    "JEV_CALIBRATED": "true",
-    "JEV_CONFIDENCE_THRESHOLD": "0.9",
-    "JEV_INPUT_USD_PER_MILLION": "0.042",
+    "JUDGE_ENABLED": "true",
+    "REVIEW_COACHING_ENABLED": "true",
+    "COACH_CONFIDENCE_THRESHOLD": "0.3",
+    "JUDGE_CONFIDENCE_THRESHOLD": "0.2",
+    "JUDGE_INPUT_USD_PER_MILLION": "0.038",
     "AI_DAILY_BUDGET_USD": "1",
     "GITHUB_CLIENT_ID": "Iv23liIU7hVd8ynBoZN4",
     "GITHUB_APP_SLUG": "maintainer-sim",

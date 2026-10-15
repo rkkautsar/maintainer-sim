@@ -1,14 +1,20 @@
 import {
   reviewCriteria as criteria,
   reviewInstructions,
-  validReviewProbabilities,
+  readChoice,
 } from "../judge-prompt.ts";
+import {
+  coachingQuestions,
+  constructiveCriteria,
+  focusCriteria,
+  encodeCoaching,
+  decodeCoaching,
+} from "../review-coaching.ts";
 import { createHash } from "node:crypto";
 import type { Env } from "./env.ts";
 import type { Reviewer } from "../persistence.ts";
-import type { Finding } from "../types.ts";
+import type { Finding, ReviewCoaching } from "../types.ts";
 export function unwrapJevResponse(data: any) {
-  // The live AI binding returns a completion envelope; some adapters return the result directly.
   if (data?.state === "Completed") return data.result;
   if (typeof data?.state === "string") return undefined;
   return data;
@@ -23,23 +29,69 @@ export class CloudJudge implements Reviewer {
     concern: string,
     files: Record<string, string>,
   ): Promise<Finding["category"] | undefined> {
-    if (this.env.JEV_CALIBRATED !== "true") return;
-    const threshold = Number(this.env.JEV_CONFIDENCE_THRESHOLD);
+    const threshold = Number(this.env.JUDGE_CONFIDENCE_THRESHOLD);
     if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) return;
-    const input = {
-      state: { review, expectedConcern: concern, source: files },
-      questions: {
-        identification: {
-          type: "choice",
-          instructions: reviewInstructions,
-          criteria,
+    const result = await this.request(
+      {
+        state: { review, expectedConcern: concern, source: files },
+        questions: {
+          identification: {
+            type: "choice",
+            instructions: reviewInstructions,
+            criteria,
+          },
         },
       },
-    };
-    const serialized = JSON.stringify(input);
-    if (Buffer.byteLength(serialized) > 24000) return;
+      "identification:" + threshold,
+      (data) => readChoice(data?.answers?.identification, criteria, threshold),
+      (value) => typeof value === "string" && Object.hasOwn(criteria, value),
+    );
+    return result as Finding["category"] | undefined;
+  }
+  async coach(
+    review: string,
+    files: Record<string, string>,
+  ): Promise<ReviewCoaching | undefined> {
+    if (this.env.REVIEW_COACHING_ENABLED !== "true" || !review.trim()) return;
+    const threshold = Number(this.env.COACH_CONFIDENCE_THRESHOLD ?? 0.3);
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) return;
+    const result = await this.request(
+      {
+        state: { review, source: files },
+        questions: coachingQuestions,
+      },
+      "coaching:" + threshold,
+      (data) => {
+        const feedback = {
+          constructiveness: readChoice(
+            data?.answers?.constructiveness,
+            constructiveCriteria,
+            threshold,
+          ),
+          focus: readChoice(data?.answers?.focus, focusCriteria, threshold),
+        } as ReviewCoaching;
+        return feedback.constructiveness || feedback.focus
+          ? encodeCoaching(feedback)
+          : undefined;
+      },
+      (value) => !!decodeCoaching(value),
+    );
+    return decodeCoaching(result);
+  }
+  private async request(
+    input: Record<string, unknown>,
+    purpose: string,
+    parse: (data: any) => string | undefined,
+    valid: (result: unknown) => boolean,
+  ): Promise<string | undefined> {
+    if (this.env.JUDGE_ENABLED !== "true") return;
+    const payload = { ...input, model: "clef-flash" };
+    const serialized = JSON.stringify(payload);
+    if (Buffer.byteLength(serialized) > 20000) return;
     const key = createHash("sha256")
-      .update("cf-judge-v1:typesafe/jev:" + threshold + ":" + serialized)
+      .update(
+        "cf-review-v2:@cf/cloudflare/clef-flash:" + purpose + ":" + serialized,
+      )
       .digest("hex");
     const budget = this.env.BUDGET.get(this.env.BUDGET.idFromName("global"));
     try {
@@ -49,37 +101,12 @@ export class CloudJudge implements Reviewer {
           body: JSON.stringify({ action: "claim", key }),
         })
       ).json()) as any;
-      if (!claim.claimed)
-        return Object.hasOwn(criteria, claim.result) ? claim.result : undefined;
-      const options = this.env.AI_GATEWAY_ID
-        ? {
-            gateway: {
-              id: this.env.AI_GATEWAY_ID,
-              skipCache: true,
-              collectLog: false,
-              retries: { maxAttempts: 1 },
-              requestTimeoutMs: 10000,
-            },
-          }
-        : undefined;
-      const raw = await (this.env.AI.run as any)(
-        "typesafe/jev",
-        input,
-        options,
+      if (!claim.claimed) return valid(claim.result) ? claim.result : undefined;
+      // No gateway override: use standard Workers AI billing and its Neuron allowance.
+      const data = unwrapJevResponse(
+        await (this.env.AI.run as any)("@cf/cloudflare/clef-flash", payload),
       );
-      const data = unwrapJevResponse(raw);
-      const a = data?.answers?.identification;
-      let result: Finding["category"] | undefined;
-      const probs = a?.probabilities;
-      if (
-        a?.type === "choice" &&
-        Object.hasOwn(criteria, a.choice) &&
-        Number.isFinite(a.confidence) &&
-        a.confidence >= threshold &&
-        a.confidence <= 1 &&
-        validReviewProbabilities(probs)
-      )
-        result = a.choice;
+      const result = parse(data);
       const tokens = data?.usage?.input_tokens;
       if (Number.isSafeInteger(tokens) && tokens >= 0 && tokens <= 32000)
         await budget.fetch("https://budget/complete", {

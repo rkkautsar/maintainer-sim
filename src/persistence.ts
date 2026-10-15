@@ -1,4 +1,4 @@
-import type { Run, Finding } from "./types.ts";
+import type { Run, Finding, ReviewCoaching } from "./types.ts";
 export interface Persistence {
   db: {
     prepare(sql: string): {
@@ -12,6 +12,10 @@ export interface Persistence {
   all(): Run[];
 }
 export interface Reviewer {
+  coach?(
+    review: string,
+    files: Record<string, string>,
+  ): Promise<ReviewCoaching | undefined>;
   evaluate(
     review: string,
     concern: string,

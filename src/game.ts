@@ -647,7 +647,7 @@ export class Game {
         if (!this.judgeEnabled) break;
         const state = r.prs[p.id],
           v = variant(p.id, state.revision);
-        if (!v.concern || state.unscored) continue;
+        if (state.unscored) continue;
         const review = state.reviews
           .filter((x) => x.commit === state.head)
           .at(-1);
@@ -666,7 +666,36 @@ export class Game {
             )
             .map((x) => x.body)
             .join("\n");
-        const category = await judge.evaluate(text, v.concern, v.files);
+        if (!text.trim()) continue;
+        const category = v.concern
+          ? await judge.evaluate(text, v.concern, v.files)
+          : undefined;
+        // Coaching has no path into assess(), concern credit, or revision decisions.
+        if (judge.coach && text.trim()) {
+          r.coaching ??= {};
+          const attempts = (r.coaching[p.id] ??= []);
+          const fingerprint = createHash("sha256")
+            .update(review.id + ":" + state.head + ":" + text)
+            .digest("hex");
+          if (
+            attempts.length < 4 &&
+            !attempts.some((a) => a.fingerprint === fingerprint)
+          ) {
+            const attempt = {
+              reviewId: review.id,
+              revision: state.revision,
+              fingerprint,
+            } as import("./types.ts").CoachingAttempt;
+            attempts.push(attempt);
+            this.store.save(r);
+            try {
+              attempt.feedback = await judge.coach(text, v.files);
+            } catch {
+              /* Advisory failure never blocks gameplay. */
+            }
+            this.store.save(r);
+          }
+        }
         if (category) {
           r.findings[p.id] ??= [];
           if (!r.findings[p.id].some((f) => f.reviewId === review.id))

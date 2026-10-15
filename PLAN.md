@@ -17,3 +17,5 @@ Published the private forum-scenario repository with all authoring branches and 
 Removed the unused template setup, Pocket Board content, unversioned scenario fallback, paused-run migration, and superseded handoff/review documents. The launcher and authored Forum package are the supported flow.
 
 Jev trial: clearer mutually exclusive review levels reduced abstention from 13/20 to 2/20 without lowering the 0.9 threshold. A fresh 12-review set accepted 10, abstained on two, and awarded no false credit. Enabled the trial with the shared $1/day cap; deterministic fallback remains available.
+
+Clef-flash trial: replaced the deployed Jev judge with standard Workers AI Clef-flash. Added separate advisory review coaching in debriefs, capped at four attempts per PR, with no changes to deterministic scores or revision triggers from coaching. The shared inference cap remains $1/day. Current settings and measured calibration results are in docs/JUDGE.md.

@@ -5,7 +5,7 @@ import { findPackage } from "../src/packages.ts";
 import type { Env } from "../src/cloudflare/env.ts";
 // Live, opt-in operator experiment. Uses the production classifier and request format.
 // A separate in-memory budget limits this experiment; deployed settings are never changed.
-const model = process.argv[3] ?? "typesafe/jev";
+const model = process.argv[3] ?? "@cf/cloudflare/clef-flash";
 const models: Record<string, { rate: number; selector?: string }> = {
   "typesafe/jev": { rate: 0.042 },
   "@cf/cloudflare/clef": { rate: 0.24, selector: "clef" },
@@ -23,6 +23,7 @@ const fixturePaths =
 const fixtures = fixturePaths.flatMap((path) =>
   JSON.parse(readFileSync(path, "utf8")),
 );
+const coaching = process.env.CALIBRATE_COACHING === "true";
 const pack = findPackage("forum", "0.1.0");
 const charges = new Map<
   string,
@@ -60,8 +61,12 @@ let last: any, failure: string | undefined, latencyMs: number | undefined;
 try {
   const judge = new CloudJudge({
     ...proxy.env,
-    JEV_CALIBRATED: "true",
-    JEV_CONFIDENCE_THRESHOLD: "0.9",
+    JUDGE_ENABLED: "true",
+    JUDGE_CONFIDENCE_THRESHOLD:
+      process.env.CALIBRATION_THRESHOLD ??
+      (model === "@cf/cloudflare/clef-flash" ? "0.2" : "0.9"),
+    REVIEW_COACHING_ENABLED: "true",
+    COACH_CONFIDENCE_THRESHOLD: "0.3",
     AI_GATEWAY_ID: undefined,
     BUDGET: { idFromName: () => "calibration", get: () => budget } as any,
     AI: {
@@ -69,9 +74,10 @@ try {
         last = undefined;
         try {
           const started = performance.now();
+          const { model: _selector, ...stateAndQuestions } = args[1];
           const input = models[model].selector
-            ? { ...args[1], model: models[model].selector }
-            : args[1];
+            ? { ...stateAndQuestions, model: models[model].selector }
+            : stateAndQuestions;
           const raw = await (proxy.env.AI.run as any)(model, input, args[2]);
           latencyMs = performance.now() - started;
           last = unwrapJevResponse(raw);
@@ -88,15 +94,14 @@ try {
       .flatMap((stage) => stage.proposals)
       .find((p) => p.id === fixture.proposal)!;
     const variant = proposal.variants[0];
-    const actual = await judge.evaluate(
-      fixture.review,
-      variant.concern!,
-      variant.files,
-    );
+    const actual = coaching
+      ? await judge.coach(fixture.review, variant.files)
+      : await judge.evaluate(fixture.review, variant.concern!, variant.files);
     results.push({
       id: fixture.id,
       expected: fixture.expected,
       actual: actual ?? "unassessed",
+      coachingAnswers: coaching ? last?.answers : undefined,
       rawChoice: last?.answers?.identification?.choice,
       confidence: last?.answers?.identification?.confidence,
       probabilities: last?.answers?.identification?.probabilities,
@@ -117,7 +122,13 @@ try {
     at: new Date().toISOString(),
     model,
     fixturePaths,
-    confidenceThreshold: 0.9,
+    mode: coaching ? "coaching" : "concern",
+    confidenceThreshold: coaching
+      ? 0.3
+      : Number(
+          process.env.CALIBRATION_THRESHOLD ??
+            (model === "@cf/cloudflare/clef-flash" ? "0.2" : "0.9"),
+        ),
     scenarioDigest: pack.digest,
     failure,
     runBudgetUsd: limit,
@@ -133,6 +144,14 @@ try {
     falseCredit: falseCredit.length,
     positiveHits,
     positiveCases: positives.length,
+    coachingDimensions: coaching
+      ? results.flatMap((r) =>
+          Object.entries(r.expected).map(([key, expected]) => ({
+            expected,
+            actual: r.actual?.[key],
+          })),
+        )
+      : undefined,
     preliminaryPass:
       !failure &&
       results.length === fixtures.length &&
@@ -140,9 +159,26 @@ try {
       positiveHits / positives.length >= 0.8,
     results,
   };
+  if (coaching) {
+    const dimensions = report.coachingDimensions!;
+    const accepted = dimensions.filter((d) => d.actual !== undefined);
+    report.preliminaryPass =
+      !failure &&
+      results.length === fixtures.length &&
+      accepted.length / dimensions.length >= 0.7 &&
+      accepted.every((d) => d.actual === d.expected);
+    console.log(
+      JSON.stringify({
+        coachingAccepted: accepted.length,
+        coachingTotal: dimensions.length,
+        mismatches: accepted.filter((d) => d.actual !== d.expected),
+      }),
+    );
+  }
   mkdirSync("var", { recursive: true });
-  const reportPath =
-    model === "typesafe/jev"
+  const reportPath = coaching
+    ? "var/review-coaching-calibration.json"
+    : model === "typesafe/jev"
       ? "var/judge-calibration.json"
       : "var/judge-calibration-" + models[model].selector + ".json";
   writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n");

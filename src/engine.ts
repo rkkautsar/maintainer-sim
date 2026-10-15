@@ -1,3 +1,4 @@
+import { coachingAdvice } from "./review-coaching.ts";
 import { storyEnding } from "./story.ts";
 import { scenarioFor, authoredVariant, applyVariant } from "./packages.ts";
 import type { Run, Assessment } from "./types.ts";
@@ -154,5 +155,27 @@ export function debrief(run: Run): string {
       lines.push(
         `- PR ${run.prs[id].number}, review ${f.reviewId}, revision ${f.revision}: ${f.category}. Expected concern: ${variant(id, f.revision).concern ?? "none"}`,
       );
+  const coached = Object.entries(run.coaching ?? {})
+    .filter(([id]) => run.prs[id] && !run.prs[id].unscored)
+    .flatMap(([id, attempts]) =>
+      attempts.filter((a) => a.feedback).map((a) => ({ id, ...a })),
+    );
+  if (coached.length) {
+    lines.push(
+      "",
+      "## Review coaching (no score impact)",
+      "",
+      "Optional automated observations about the review message. These do not change points, concern credit, prepared revisions, or release success. Uncertain dimensions are omitted.",
+      "",
+    );
+    for (const c of coached) {
+      const messages = [c.feedback?.constructiveness, c.feedback?.focus]
+        .filter(Boolean)
+        .map((key) => coachingAdvice[key as keyof typeof coachingAdvice]);
+      lines.push(
+        `- PR ${run.prs[c.id].number}, [review ${c.reviewId}](https://github.com/${run.owner}/${run.repo}/pull/${run.prs[c.id].number}#pullrequestreview-${c.reviewId}), revision ${c.revision}: ${messages.join(" ")}`,
+      );
+    }
+  }
   return lines.join("\n");
 }

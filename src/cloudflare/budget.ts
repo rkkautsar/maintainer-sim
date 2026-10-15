@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./env.ts";
+import { decodeCoaching } from "../review-coaching.ts";
 const categories = ["absent", "vague", "identified", "consequence"];
 export class AIBudget extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -15,7 +16,7 @@ export class AIBudget extends DurableObject<Env> {
       return new Response(null, { status: 400 });
     const sql = this.ctx.storage.sql;
     if (input.action === "claim") {
-      const rate = Number(this.env.JEV_INPUT_USD_PER_MILLION),
+      const rate = Number(this.env.JUDGE_INPUT_USD_PER_MILLION),
         limit = Number(this.env.AI_DAILY_BUDGET_USD);
       if (
         !Number.isFinite(rate) ||
@@ -56,7 +57,9 @@ export class AIBudget extends DurableObject<Env> {
     }
     if (
       input.action === "complete" &&
-      (input.result === null || categories.includes(input.result))
+      (input.result === null ||
+        categories.includes(input.result) ||
+        !!decodeCoaching(input.result))
     ) {
       const tokens = input.inputTokens;
       if (!Number.isSafeInteger(tokens) || tokens < 0 || tokens > 32000)

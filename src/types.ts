@@ -22,6 +22,16 @@ export type Finding = {
   revision: number;
   reviewText?: string;
 };
+export type ReviewCoaching = {
+  constructiveness?: "actionable" | "supportive" | "vague" | "unconstructive";
+  focus?: "substantive" | "nitpick" | "automation" | "mixed" | "unclear";
+};
+export type CoachingAttempt = {
+  reviewId: number;
+  revision: number;
+  fingerprint: string;
+  feedback?: ReviewCoaching;
+};
 export type Run = {
   id: string;
   installation: number;
@@ -47,6 +57,7 @@ export type Run = {
   tree?: string;
   contentHash?: string;
   findings: Record<string, Finding[]>;
+  coaching?: Record<string, CoachingAttempt[]>;
   storySent?: Record<string, boolean>;
   result?: Assessment;
   finishEarly?: boolean;

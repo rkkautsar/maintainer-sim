@@ -249,7 +249,7 @@ export class GameSession extends DurableObject<Env> {
           env.GITHUB_PRIVATE_KEY,
         ),
       new CloudJudge(env),
-      env.JEV_CALIBRATED === "true",
+      env.JUDGE_ENABLED === "true",
     );
   }
   async fetch(request: Request): Promise<Response> {

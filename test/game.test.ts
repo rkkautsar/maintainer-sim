@@ -675,3 +675,85 @@ test("interrupted next-stage seeding resumes on repeated next command", async ()
     s.close();
   }
 });
+
+test("advisory coaching covers sound PRs, is replay safe and cannot trigger revisions", async () => {
+  const { s, fake, r } = await setup();
+  let calls = 0;
+  const game = new Game(
+    s,
+    async () => fake as unknown as GitHub,
+    {
+      evaluate: async () => undefined,
+      coach: async () => {
+        calls++;
+        return { constructiveness: "actionable", focus: "automation" };
+      },
+    },
+    true,
+  );
+  try {
+    const id = "empty-state";
+    fake.reviews = [
+      {
+        id: 90,
+        user: { id: r.player },
+        body: "Please remove trailing whitespace.",
+        state: "CHANGES_REQUESTED",
+        commit_id: r.prs[id].head,
+        submitted_at: "2026-10-15T00:00:00Z",
+      },
+    ];
+    await game.process("pull_request_review", payload(r));
+    await game.process("pull_request_review", payload(r));
+    assert.equal(calls, 1);
+    assert.equal(s.get(r.id).prs[id].revision, 0);
+    assert.deepEqual(s.get(r.id).findings, {});
+    assert.equal(s.get(r.id).coaching?.[id][0].feedback?.focus, "automation");
+    for (let n = 91; n <= 95; n++) {
+      fake.reviews[0].id = n;
+      await game.process("pull_request_review", payload(r));
+    }
+    assert.equal(calls, 4);
+    assert.equal(s.get(r.id).coaching?.[id].length, 4);
+    await game.process("issue_comment", payload(r, "/game finish"));
+    assert.match(
+      fake.comments.at(-1).body,
+      /Review coaching \(no score impact\)/,
+    );
+  } finally {
+    s.close();
+  }
+});
+test("coaching failure cannot prevent finishing a stage", async () => {
+  const { s, fake, r } = await setup();
+  const game = new Game(
+    s,
+    async () => fake as unknown as GitHub,
+    {
+      evaluate: async () => undefined,
+      coach: async () => {
+        throw new Error("Unavailable");
+      },
+    },
+    true,
+  );
+  try {
+    fake.reviews = [
+      {
+        id: 99,
+        user: { id: r.player },
+        body: "Looks good",
+        state: "APPROVED",
+        commit_id: r.prs["empty-state"].head,
+        submitted_at: "2026-10-15T00:00:00Z",
+      },
+    ];
+    await game.process("issue_comment", payload(r, "/game finish"));
+    assert.equal(s.get(r.id).phase, "finished");
+    assert.ok(
+      !fake.comments.at(-1).body.includes("Review coaching (no score impact)"),
+    );
+  } finally {
+    s.close();
+  }
+});

@@ -1,3 +1,4 @@
+import { constructiveCriteria, focusCriteria } from "../src/review-coaching.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CloudJudge } from "../src/cloudflare/judge.ts";
@@ -5,9 +6,10 @@ import type { Env } from "../src/cloudflare/env.ts";
 function fixture(answer: any, claimed = true) {
   const calls: any[] = [];
   let requests = 0;
+  const requestArgs: any[][] = [];
   const env = {
-    JEV_CALIBRATED: "true",
-    JEV_CONFIDENCE_THRESHOLD: "0.9",
+    JUDGE_ENABLED: "true",
+    JUDGE_CONFIDENCE_THRESHOLD: "0.9",
     BUDGET: {
       idFromName: () => "global",
       get: () => ({
@@ -21,14 +23,21 @@ function fixture(answer: any, claimed = true) {
       }),
     },
     AI: {
-      run: async () => {
+      run: async (...args: any[]) => {
+        requestArgs.push(args);
         requests++;
         if (answer instanceof Error) throw answer;
         return answer;
       },
     },
   } as unknown as Env;
-  return { env, calls, requests: () => requests, judge: new CloudJudge(env) };
+  return {
+    env,
+    calls,
+    requestArgs,
+    requests: () => requests,
+    judge: new CloudJudge(env),
+  };
 }
 const response = (confidence = 0.99) => ({
   answers: {
@@ -48,6 +57,9 @@ test("Cloudflare judge reserves before inference and settles actual tokens", asy
     "consequence",
   );
   assert.equal(f.requests(), 1);
+  assert.equal(f.requestArgs[0][0], "@cf/cloudflare/clef-flash");
+  assert.equal(f.requestArgs[0][1].model, "clef-flash");
+  assert.equal(f.requestArgs[0].length, 2);
   assert.deepEqual(
     f.calls.map((c) => c.action),
     ["claim", "complete"],
@@ -57,7 +69,7 @@ test("Cloudflare judge reserves before inference and settles actual tokens", asy
 });
 test("disabled or exhausted Cloudflare judge makes no paid inference", async () => {
   const disabled = fixture(response());
-  disabled.env.JEV_CALIBRATED = "false";
+  disabled.env.JUDGE_ENABLED = "false";
   assert.equal(
     await disabled.judge.evaluate("review", "concern", {}),
     undefined,
@@ -121,4 +133,52 @@ test("two-decimal Jev probabilities tolerate rounding but reject malformed distr
     await fixture(invalid).judge.evaluate("review", "concern", {}),
     undefined,
   );
+});
+
+function choice(
+  criteria: Record<string, string>,
+  selected: string,
+  confidence = 0.8,
+) {
+  return {
+    type: "choice",
+    choice: selected,
+    confidence,
+    probabilities: Object.fromEntries(
+      Object.keys(criteria).map((k) => [k, k === selected ? 1 : 0]),
+    ),
+  };
+}
+test("coaching has separate questions, cache value, and low-confidence dimensions", async () => {
+  const f = fixture({
+    answers: {
+      constructiveness: choice(constructiveCriteria, "actionable"),
+      focus: choice(focusCriteria, "automation", 0.1),
+    },
+    usage: { input_tokens: 600 },
+  });
+  f.env.REVIEW_COACHING_ENABLED = "true";
+  assert.deepEqual(await f.judge.coach("Please format this", {}), {
+    constructiveness: "actionable",
+  });
+  assert.equal(f.calls[1].result, "coach-v1:actionable:unknown");
+  assert.equal(f.requestArgs[0][1].questions.identification, undefined);
+  assert.equal(f.requestArgs[0][1].state.expectedConcern, undefined);
+});
+test("disabled or empty coaching makes no inference request", async () => {
+  const f = fixture({});
+  assert.equal(await f.judge.coach("Looks good", {}), undefined);
+  f.env.REVIEW_COACHING_ENABLED = "true";
+  assert.equal(await f.judge.coach(" ", {}), undefined);
+  assert.equal(f.requests(), 0);
+});
+test("coaching cannot substitute a fabricated choice or mismatched probabilities", async () => {
+  const invalid = choice(focusCriteria, "substantive");
+  invalid.choice = "nitpick";
+  const f = fixture({
+    answers: { focus: invalid },
+    usage: { input_tokens: 100 },
+  });
+  f.env.REVIEW_COACHING_ENABLED = "true";
+  assert.equal(await f.judge.coach("Missing owner check", {}), undefined);
 });

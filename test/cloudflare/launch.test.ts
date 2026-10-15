@@ -223,10 +223,10 @@ function fixture(
       GITHUB_CLIENT_ID: "fixture-client",
       GITHUB_CLIENT_SECRET: "fixture-client-secret",
       PUBLIC_ORIGIN: "https://app",
-      JEV_CALIBRATED: "false",
-      JEV_INPUT_USD_PER_MILLION: "0.042",
+      JUDGE_ENABLED: "false",
+      JUDGE_INPUT_USD_PER_MILLION: "0.042",
       AI_DAILY_BUDGET_USD: "1",
-      JEV_CONFIDENCE_THRESHOLD: "0.9",
+      JUDGE_CONFIDENCE_THRESHOLD: "0.9",
     },
     outboundService: outbound,
   });
