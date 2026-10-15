@@ -1,0 +1,5 @@
+# Copy to .dev.vars for local Wrangler development. Never commit real values.
+GITHUB_APP_ID=""
+GITHUB_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PKCS8_KEY\n-----END PRIVATE KEY-----"
+WEBHOOK_SECRET=""
+ADMIN_TOKEN="REPLACE_WITH_AT_LEAST_32_RANDOM_CHARACTERS"

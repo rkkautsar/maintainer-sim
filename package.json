@@ -1,0 +1,40 @@
+{
+  "name": "maintainer-sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "check": "tsc --noEmit",
+    "demo": "node src/cli.ts demo",
+    "start": "node --env-file-if-exists=.env src/cli.ts serve",
+    "cli": "node --env-file-if-exists=.env src/cli.ts",
+    "bundle:scenario": "node scripts/bundle-scenario.ts",
+    "cf:dev": "wrangler dev",
+    "cf:check": "wrangler deploy --dry-run --outdir var/worker-build",
+    "cf:deploy": "wrangler deploy",
+    "cf:cli": "node --env-file-if-exists=.env src/cloudflare-cli.ts",
+    "test:cf": "npm run cf:check && node --test test/cloudflare/*.test.ts",
+    "board": "node src/cli.ts board"
+  },
+  "dependencies": {
+    "@octokit/rest": "^22.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261014.1",
+    "@types/node": "^24.0.0",
+    "miniflare": "^4.20260730.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.151.0"
+  },
+  "overrides": {
+    "miniflare": {
+      "undici": "^7.30.0",
+      "sharp": "^0.35.5"
+    }
+  }
+}

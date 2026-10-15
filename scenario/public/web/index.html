@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pocket Board</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        color: #24372f;
+        background: #f4f2e9;
+      }
+      body {
+        max-width: 760px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+      h1 {
+        font-size: 40px;
+        margin-bottom: 4px;
+      }
+      .subtitle {
+        color: #5e6b61;
+        margin-top: 0;
+      }
+      .notice {
+        background: #e6ecde;
+        border-radius: 12px;
+        padding: 16px;
+        margin: 24px 0;
+      }
+      select,
+      input,
+      button {
+        font: inherit;
+        padding: 10px;
+        border: 1px solid #bac4b7;
+        border-radius: 8px;
+      }
+      button {
+        background: #345e48;
+        color: white;
+        cursor: pointer;
+      }
+      button:disabled {
+        background: #869286;
+        cursor: default;
+      }
+      form {
+        display: flex;
+        gap: 10px;
+        margin: 22px 0;
+      }
+      input {
+        flex: 1;
+        min-width: 0;
+      }
+      article {
+        background: white;
+        border: 1px solid #d5dccf;
+        border-radius: 12px;
+        margin: 14px 0;
+        padding: 18px;
+      }
+      article h2 {
+        font-size: 20px;
+        overflow-wrap: anywhere;
+      }
+      article small {
+        color: #6b7469;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      #status {
+        min-height: 24px;
+        color: #8e3b2a;
+      }
+      .pager {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      footer {
+        font-size: 13px;
+        color: #677365;
+        margin: 30px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Pocket Board</h1>
+      <p class="subtitle">Small notices. Useful neighbors.</p>
+    </header>
+    <div class="notice">
+      <strong>Saturday at the repair café</strong>
+      <p>
+        The board is open for posts. Likes, organizer edits, and pagination are
+        being reviewed for the launch.
+      </p>
+      <div id="features"></div>
+    </div>
+    <label for="user">Try the board as </label
+    ><select id="user" aria-label="Demo user"></select>
+    <form id="create">
+      <input
+        id="title"
+        maxlength="200"
+        placeholder="Share a notice with your neighbors"
+        aria-label="New post title"
+        required
+      /><button>Post</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+    <main id="posts"></main>
+    <div class="pager">
+      <button id="previous">Previous</button><span id="page-label"></span
+      ><button id="next">Next</button>
+    </div>
+    <footer>
+      Local training app. Demo identities are selectable, not secure
+      authentication. Follow the Game Master issue in GitHub for the stage
+      story.
+    </footer>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

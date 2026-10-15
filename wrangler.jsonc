@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "maintainer-sim",
+  "main": "src/cloudflare/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "durable_objects": { "bindings": [
+    { "name": "GAMES", "class_name": "GameSession" },
+    { "name": "BUDGET", "class_name": "AIBudget" }
+  ] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameSession", "AIBudget"] }],
+  "ai": { "binding": "AI" },
+  "vars": {
+    "JEV_CALIBRATED": "false",
+    "JEV_CONFIDENCE_THRESHOLD": "0.9",
+    "JEV_INPUT_USD_PER_MILLION": "0.042",
+    "AI_DAILY_BUDGET_USD": "1"
+  },
+  "build": { "command": "node scripts/bundle-scenario.ts" },
+  "observability": { "enabled": true }
+}
