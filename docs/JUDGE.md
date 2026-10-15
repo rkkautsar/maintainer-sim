@@ -53,3 +53,25 @@ These small authored sets demonstrate improvement on this scenario, not a genera
 ## Free access alternatives
 
 [OpenCode Console](https://opencode.ai/v2/docs/console/models/) currently lists `jev-1.13-free` as a limited-time free model at its `/inference/v1/systemone` endpoint. This is separate from the Go subscription list. [Vercel AI Gateway](https://vercel.com/docs/ai-gateway/pricing) includes $5/month free credits for eligible models; verify Jev eligibility in its catalog instead of assuming all models qualify. Cloudflare's Workers AI free Neuron allowance is separate from the third-party AI Gateway credit balance used by this integration.
+
+## Clef and Clef-flash comparison
+
+Both models use the same typed questions and the existing Workers AI binding. The calibration runner supports their required `model` selector while preserving the production review prompt, confidence gate and validation:
+
+```bash
+npm run judge:calibrate -- all @cf/cloudflare/clef-flash
+npm run judge:calibrate -- all @cf/cloudflare/clef
+```
+
+Each invocation has its own $0.05 conservative experiment allowance, even when the actual inference is covered by Cloudflare's free allocation. These commands never select a different production judge or change its gate. Model-specific reports are saved under ignored `var/judge-calibration-clef-flash.json` and `var/judge-calibration-clef.json`.
+
+2026-10-15 comparison on the combined 20-example and 12-example sets, using the revised prompt:
+
+| Model      | Raw label matches | Accepted at 0.9 | Median binding call | List-price equivalent before free allocation |
+| ---------- | ----------------- | --------------- | ------------------- | -------------------------------------------- |
+| Clef-flash | 30/32             | 0/32            | 482 ms              | $0.001303                                    |
+| Clef       | 21/32             | 0/32            | 434 ms              | $0.008229                                    |
+
+Latency includes the remote development binding and is not a production serving benchmark. All 32 Clef requests abstained with the unchanged Jev gate. This is not evidence that the models cannot work: their reported distributions and confidence differ, so a cutoff needs its own calibration. The two raw Clef-flash errors were grading-command examples; both had low confidence and were rejected. Investigating other cutoffs against these same examples is exploratory, not validation on unseen data. Production remains on Jev.
+
+Current official rates are [Clef-flash at $0.038/M input tokens](https://developers.cloudflare.com/workers-ai/models/clef-flash/) and [Clef at $0.24/M input tokens](https://developers.cloudflare.com/workers-ai/models/clef/), with no output token charge. Cloudflare's [10,000 free Neurons/day](https://developers.cloudflare.com/workers-ai/platform/pricing/) is shared across Workers AI usage under standard Workers AI billing. At the published 3,455 Neurons/M input tokens for Flash, an otherwise unused allowance covers about 2.89M input tokens/day (roughly 2,900 reviews at 1,000 tokens each). Routing through a gateway configured for prepaid Unified Billing uses that billing mode instead; check the billing route before assuming the free allocation applies.

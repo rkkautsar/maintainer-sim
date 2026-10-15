@@ -4,12 +4,24 @@ import { CloudJudge, unwrapJevResponse } from "../src/cloudflare/judge.ts";
 import { findPackage } from "../src/packages.ts";
 import type { Env } from "../src/cloudflare/env.ts";
 // Live, opt-in operator experiment. Uses the production classifier and request format.
-// A separate in-memory budget limits this entire experiment; production stays disabled.
-const rate = 0.042,
+// A separate in-memory budget limits this experiment; deployed settings are never changed.
+const model = process.argv[3] ?? "typesafe/jev";
+const models: Record<string, { rate: number; selector?: string }> = {
+  "typesafe/jev": { rate: 0.042 },
+  "@cf/cloudflare/clef": { rate: 0.24, selector: "clef" },
+  "@cf/cloudflare/clef-flash": { rate: 0.038, selector: "clef-flash" },
+};
+if (!models[model]) throw new Error("Unsupported decision model");
+const rate = models[model].rate,
   limit = 0.05,
   reservation = (32000 * rate) / 1e6;
-const fixtures = JSON.parse(
-  readFileSync(process.argv[2] ?? "test/fixtures/judge-reviews.json", "utf8"),
+const fixtureSource = process.argv[2] ?? "test/fixtures/judge-reviews.json";
+const fixturePaths =
+  fixtureSource === "all"
+    ? ["test/fixtures/judge-reviews.json", "test/fixtures/judge-heldout.json"]
+    : [fixtureSource];
+const fixtures = fixturePaths.flatMap((path) =>
+  JSON.parse(readFileSync(path, "utf8")),
 );
 const pack = findPackage("forum", "0.1.0");
 const charges = new Map<
@@ -44,7 +56,7 @@ const proxy = await getPlatformProxy<Env>({
   remoteBindings: true,
 });
 const results: any[] = [];
-let last: any, failure: string | undefined;
+let last: any, failure: string | undefined, latencyMs: number | undefined;
 try {
   const judge = new CloudJudge({
     ...proxy.env,
@@ -56,7 +68,12 @@ try {
       run: async (...args: any[]) => {
         last = undefined;
         try {
-          const raw = await (proxy.env.AI.run as any)(...args);
+          const started = performance.now();
+          const input = models[model].selector
+            ? { ...args[1], model: models[model].selector }
+            : args[1];
+          const raw = await (proxy.env.AI.run as any)(model, input, args[2]);
+          latencyMs = performance.now() - started;
           last = unwrapJevResponse(raw);
           return raw;
         } catch (error: any) {
@@ -84,6 +101,7 @@ try {
       confidence: last?.answers?.identification?.confidence,
       probabilities: last?.answers?.identification?.probabilities,
       inputTokens: last?.usage?.input_tokens,
+      latencyMs,
     });
     console.log(JSON.stringify(results.at(-1)));
     if (failure) break; // Never retry billing or authentication failures across the fixture set.
@@ -97,13 +115,20 @@ try {
   const positiveHits = positives.filter((r) => earnsCredit(r.actual)).length;
   const report = {
     at: new Date().toISOString(),
-    model: "typesafe/jev",
+    model,
+    fixturePaths,
+    confidenceThreshold: 0.9,
     scenarioDigest: pack.digest,
     failure,
     runBudgetUsd: limit,
     reservedOrSettledUsd: total(),
     cases: results.length,
     expectedCases: fixtures.length,
+    medianLatencyMs: results
+      .map((r) => r.latencyMs)
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b)[Math.floor(results.length / 2)],
+    rawMatches: results.filter((r) => r.expected === r.rawChoice).length,
     exactMatches: results.filter((r) => r.expected === r.actual).length,
     falseCredit: falseCredit.length,
     positiveHits,
@@ -116,13 +141,14 @@ try {
     results,
   };
   mkdirSync("var", { recursive: true });
-  writeFileSync(
-    "var/judge-calibration.json",
-    JSON.stringify(report, null, 2) + "\n",
-  );
+  const reportPath =
+    model === "typesafe/jev"
+      ? "var/judge-calibration.json"
+      : "var/judge-calibration-" + models[model].selector + ".json";
+  writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n");
   console.log(JSON.stringify({ ...report, results: undefined }));
   console.log(
-    "Report: var/judge-calibration.json. This command does not enable gameplay judging.",
+    `Report: ${reportPath}. This command does not change gameplay judging.`,
   );
   if (!report.preliminaryPass) process.exitCode = 1;
 } finally {
