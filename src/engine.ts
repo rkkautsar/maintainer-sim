@@ -1,6 +1,5 @@
-import { lessons } from "./lessons.ts";
 import { storyEnding } from "./story.ts";
-import { baseline, issues, proposals, variant } from "./scenario.ts";
+import { scenarioFor, authoredVariant, applyVariant } from "./packages.ts";
 import type { Run, Assessment } from "./types.ts";
 export function initialRun(
   input: Pick<
@@ -11,15 +10,19 @@ export function initialRun(
   return { ...input, phase: "seeding", issues: {}, prs: {}, findings: {} };
 }
 export function expectedFiles(run: Run): Record<string, string> {
+  const { baseline, proposals } = scenarioFor(run);
   const files = { ...(run.baselineFiles ?? baseline) };
   for (const p of proposals) {
     const state = run.prs[p.id];
     if (state?.outcome === "merged")
-      Object.assign(files, variant(p.id, state.revision).files);
+      applyVariant(files, authoredVariant(run, p.id, state.revision));
   }
   return files;
 }
 export function assess(run: Run): Assessment {
+  const { issues, proposals } = scenarioFor(run);
+  const variant = (id: string, revision: number) =>
+    authoredVariant(run, id, revision);
   if (!proposals.every((p) => run.prs[p.id]))
     throw new Error("Incomplete scenario");
   const unverified = run.unverifiedIssues ?? [];
@@ -85,11 +88,14 @@ export function assess(run: Run): Assessment {
   };
 }
 export function debrief(run: Run): string {
+  const { proposals } = scenarioFor(run);
+  const variant = (id: string, revision: number) =>
+    authoredVariant(run, id, revision);
   const r = run.result ?? assess(run);
   const lines = [
     "## Stage debrief",
     "",
-    storyEnding(r),
+    storyEnding(r, run),
     "",
     `Milestone: ${r.complete.length}/${r.total} requirements satisfied.${r.unverified?.length ? " Not assessed: " + r.unverified.join(", ") + "." : ""}`,
     r.maximum
@@ -131,7 +137,9 @@ export function debrief(run: Run): string {
   }
   lines.push("", "## Review takeaways", "");
   for (const p of proposals)
-    lines.push(`- PR ${run.prs[p.id].number}: ${lessons[p.id]}`);
+    lines.push(
+      `- PR ${run.prs[p.id].number}: ${p.lesson ?? "Review the contribution against its linked requirements."}`,
+    );
   lines.push("");
   for (const [id, findings] of Object.entries(run.findings).filter(
     ([id]) => !run.prs[id].unscored,

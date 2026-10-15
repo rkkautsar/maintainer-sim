@@ -1,3 +1,7 @@
+import { launchRoute } from "./launch.ts";
+import { launchPage, launchScript } from "../launch-page.ts";
+import { catalog, findPackage, scenarioFor } from "../packages.ts";
+export { LaunchSession } from "./launch.ts";
 import { installationCandidates, startCandidate } from "../onboarding.ts";
 import { DurableObject } from "cloudflare:workers";
 import { createHash, timingSafeEqual, randomUUID } from "node:crypto";
@@ -50,6 +54,111 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       const url = new URL(request.url);
+      const launcher = await launchRoute(request, env);
+      if (launcher) {
+        const response = new Response(launcher.body, launcher);
+        response.headers.set("cache-control", "no-store");
+        response.headers.set("vary", "Cookie");
+        response.headers.set("referrer-policy", "no-referrer");
+        response.headers.set("x-content-type-options", "nosniff");
+        return response;
+      }
+      if (request.method === "GET" && url.pathname === "/")
+        return new Response(launchPage, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "content-security-policy":
+              "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            "x-content-type-options": "nosniff",
+          },
+        });
+      if (request.method === "GET" && url.pathname === "/launch.js")
+        return new Response(launchScript, {
+          headers: {
+            "content-type": "text/javascript; charset=utf-8",
+            "cache-control": "no-cache",
+          },
+        });
+      if (request.method === "GET" && url.pathname === "/setup")
+        return Response.redirect(
+          new URL("/", env.PUBLIC_ORIGIN ?? url.origin),
+          302,
+        );
+      if (request.method === "GET" && url.pathname === "/api/scenarios")
+        return Response.json(
+          catalog().map((p) => ({
+            id: p.id,
+            version: p.version,
+            title: p.title,
+            description: p.description,
+            stages: p.stages.length,
+            prs: p.stages.reduce((n, s) => n + s.proposals.length, 0),
+          })),
+        );
+      const portrait = /^\/portraits\/([a-f0-9]{64})\/([a-z0-9-]+)\.svg$/.exec(
+        url.pathname,
+      );
+      if (request.method === "GET" && portrait) {
+        const pack = catalog().find((p) => p.digest === portrait[1]),
+          image = pack?.characters[portrait[2]]?.avatar;
+        return image
+          ? new Response(image, {
+              headers: {
+                "content-type": "image/svg+xml",
+                "cache-control": "public,max-age=31536000,immutable",
+                "content-security-policy":
+                  "default-src 'none'; style-src 'none'; sandbox",
+                "x-content-type-options": "nosniff",
+              },
+            })
+          : new Response(null, { status: 404 });
+      }
+      const preview = /^\/scenarios\/([a-z0-9-]+)\/([0-9.]+)\/preview$/.exec(
+        url.pathname,
+      );
+      if (request.method === "GET" && (preview || url.pathname === "/about")) {
+        const esc = (s: string) =>
+          s.replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c]!,
+          );
+        const p = preview ? findPackage(preview[1], preview[2]) : undefined;
+        const heading = p
+          ? p.title + " — starting app"
+          : "About Maintainer Sim";
+        const body = p
+          ? "<p>" +
+            esc(p.description) +
+            "</p><pre>" +
+            esc(p.stages[0].baseline["README.md"] ?? "") +
+            "</pre><h2>Application files</h2><pre>" +
+            esc(Object.keys(p.stages[0].baseline).join("\n")) +
+            "</pre>"
+          : "<p>Practise maintaining an open-source project in GitHub. Review contributions, reach a milestone, and learn what your decisions mean for the project.</p><p>Scenarios contain a real runnable app and authored contributions. Contributor names and portraits are fictional; all GitHub posts come from the Maintainer Sim App.</p><p>Start from the launch page, connect GitHub, and choose a new repository in your own account. You can finish early with <code>/game finish</code> and advance after debrief with <code>/game next</code>.</p>";
+        return new Response(
+          '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
+            esc(heading) +
+            '</title><style>body{font:16px/1.7 system-ui;max-width:850px;margin:40px auto;padding:24px;background:#f7f6f1;color:#26352b}a{color:#35674a}h1{font:42px Georgia}pre{white-space:pre-wrap;background:white;padding:24px;border:1px solid #dde2d6;border-radius:8px;font-size:13px}</style><a href="/">← Maintainer Sim</a><h1>' +
+            esc(heading) +
+            "</h1>" +
+            body +
+            "</html>",
+          {
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              "content-security-policy":
+                "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+            },
+          },
+        );
+      }
       if (url.pathname === "/health" && request.method === "GET")
         return new Response("ok");
       if (url.pathname === "/webhooks" && request.method === "POST") {
@@ -149,6 +258,24 @@ export class GameSession extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (path === "/status") return Response.json(this.store.all());
+    if (path === "/progress") {
+      const run = this.store
+        .all()
+        .find(
+          (r) =>
+            r.repository ===
+            Number(new URL(request.url).searchParams.get("repository")),
+        );
+      return Response.json({
+        phase: run?.phase,
+        failed: !!(
+          run &&
+          this.store.db
+            .prepare("SELECT id FROM deliveries WHERE id=? AND status='failed'")
+            .get("seed:" + run.id)
+        ),
+      });
+    }
     const input = (await request.json()) as any;
     if (path === "/seed") {
       if (
@@ -179,6 +306,14 @@ export class GameSession extends DurableObject<Env> {
         repo: input.repo,
         player: input.player,
       });
+      if (input.scenario) {
+        try {
+          run.scenario = input.scenario;
+          scenarioFor(run);
+        } catch {
+          return new Response("Unknown scenario package", { status: 400 });
+        }
+      }
       let duplicate = false;
       this.ctx.storage.transactionSync(() => {
         if (this.store.all().some((r) => r.repository === input.repository)) {

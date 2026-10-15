@@ -18,10 +18,13 @@
     "cf:deploy": "wrangler deploy",
     "cf:cli": "node --env-file-if-exists=.env src/cloudflare-cli.ts",
     "test:cf": "npm run cf:check && node --test test/cloudflare/*.test.ts",
-    "board": "node src/cli.ts board"
+    "board": "node src/cli.ts board",
+    "scenario": "node scripts/scenario.ts",
+    "bundle:packages": "node scripts/bundle-packages.ts"
   },
   "dependencies": {
-    "@octokit/rest": "^22.0.0"
+    "@octokit/rest": "^22.0.0",
+    "yaml": "2.8.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261014.1",

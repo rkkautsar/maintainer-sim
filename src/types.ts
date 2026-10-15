@@ -30,6 +30,8 @@ export type Run = {
   repo: string;
   player: number;
   phase: Phase;
+  scenario?: { id: string; version: string; stage: string; digest: string };
+  previousRun?: string;
   reason?: string;
   phaseBeforeAccessLoss?: Phase;
   warnings?: string[];
@@ -75,6 +77,8 @@ export type Variant = {
   explanation: string;
   debt?: string;
   serious?: boolean;
+  deletes?: string[];
+  reply?: string;
 };
 export type Proposal = {
   id: string;
@@ -83,4 +87,7 @@ export type Proposal = {
   issue?: string;
   group?: string;
   variants: Variant[];
+  character?: string;
+  lesson?: string;
+  followup?: string;
 };

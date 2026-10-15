@@ -1,13 +1,19 @@
 import {
   storyBody,
   stageTitle,
-  contributorNotes,
-  followups,
+  contributorNote,
+  followup,
   revisionReply,
   communityUpdate,
 } from "./story.ts";
 import { createHash } from "node:crypto";
-import { baseline, issues, proposals, variant } from "./scenario.ts";
+import {
+  scenarioFor,
+  authoredVariant,
+  applyVariant,
+  renderLinks,
+  selectScenario,
+} from "./packages.ts";
 import { assess, debrief, expectedFiles } from "./engine.ts";
 import { command } from "./security.ts";
 import type { Persistence, Reviewer } from "./persistence.ts";
@@ -48,6 +54,9 @@ export class Game {
     return `<!-- maintainer-sim:${r.id}:${id} -->`;
   }
   async seed(r: Run) {
+    const { baseline, issues, proposals, pack, title } = scenarioFor(r);
+    const variant = (id: string, revision: number) =>
+      authoredVariant(r, id, revision);
     const gh = await this.connect(r),
       root = this.root(r);
     const repository = await gh.get(root);
@@ -72,7 +81,7 @@ export class Game {
     }
     await this.pinBaseline(r, gh);
     if (!r.milestone) {
-      const title = "Pocket Board — " + r.id;
+      const title = pack.title + " — " + r.id;
       const existing = (await gh.list(root + "/milestones?state=all")).find(
         (x) => x.title === title,
       );
@@ -80,8 +89,7 @@ export class Game {
         existing ??
         (await gh.post(root + "/milestones", {
           title,
-          description:
-            "Deliver safe likes, owner-only edits, and bounded pagination.",
+          description: issues.map((i) => i.title).join("; "),
         }))
       ).number;
       this.store.save(r);
@@ -92,7 +100,7 @@ export class Game {
       r.master = (
         all.find((x) => x.body?.includes(this.marker(r, "master"))) ??
         (await gh.post(root + "/issues", {
-          title: "Game Master — " + stageTitle,
+          title: "Game Master — " + title,
           body,
         }))
       ).number;
@@ -131,6 +139,7 @@ export class Game {
             r.baseline!,
             p.variants[0].files,
             "Community contribution",
+            p.variants[0].deletes,
           )
         ).sha;
         await gh.post(root + "/git/refs", {
@@ -140,15 +149,14 @@ export class Game {
       }
       if (
         !equal(await gh.tree(root, head), {
-          ...r.baselineFiles,
-          ...p.variants[0].files,
+          ...applyVariant({ ...r.baselineFiles }, p.variants[0]),
         })
       )
         throw new Error("Unexpected seeded branch");
       const body =
-        contributorNotes[p.id] +
+        contributorNote(r, p.id) +
         "\n\n" +
-        p.body +
+        renderLinks(p.body, r) +
         (p.issue ? "\n\nCloses #" + r.issues[p.issue] : "") +
         "\n\n" +
         this.marker(r, p.id);
@@ -168,6 +176,18 @@ export class Game {
         reviews: [],
       };
       this.store.save(r);
+    }
+    for (const p of proposals.filter((p) => p.body.includes("{{pr:"))) {
+      const body =
+        contributorNote(r, p.id) +
+        "\n\n" +
+        renderLinks(p.body, r) +
+        (p.issue ? "\n\nCloses #" + r.issues[p.issue] : "") +
+        "\n\n" +
+        this.marker(r, p.id);
+      const pr = await gh.get(root + "/pulls/" + r.prs[p.id].number);
+      if (pr.body !== body)
+        await gh.patch(root + "/pulls/" + r.prs[p.id].number, { body });
     }
     await gh.patch(root + "/issues/" + r.master, {
       body: storyBody(r) + "\n\n" + this.marker(r, "master"),
@@ -195,6 +215,9 @@ export class Game {
     this.store.save(r);
   }
   async reconcile(r: Run, gh: GitHub) {
+    const { baseline, issues, proposals, pack, title } = scenarioFor(r);
+    const variant = (id: string, revision: number) =>
+      authoredVariant(r, id, revision);
     await this.pinBaseline(r, gh);
     const root = this.root(r),
       snapshot: Record<string, any> = {};
@@ -333,7 +356,7 @@ export class Game {
     for (const [id, state] of Object.entries(r.prs)) {
       const key =
         state.revision > 0 ? `reply-${id}-${state.revision}` : `context-${id}`;
-      const body = state.revision > 0 ? revisionReply(r, id) : followups[id];
+      const body = state.revision > 0 ? revisionReply(r, id) : followup(r, id);
       if (!body || r.storySent[key]) continue;
       const marker = this.marker(r, key),
         path = this.root(r) + "/issues/" + state.number + "/comments";
@@ -360,6 +383,9 @@ export class Game {
       });
   }
   async revise(r: Run, number: number, gh: GitHub) {
+    const { baseline, issues, proposals, pack, title } = scenarioFor(r);
+    const variant = (id: string, revision: number) =>
+      authoredVariant(r, id, revision);
     const p = proposals.find((p) => r.prs[p.id].number === number);
     if (!p) throw new Error("Not a scenario PR");
     const state = r.prs[p.id];
@@ -390,11 +416,23 @@ export class Game {
     const branch = `game/${r.id}/${p.id}`,
       root = this.root(r);
     // Record the intended head before mutation: a retry can recover a failed response.
+    const previous = applyVariant(
+      { ...r.baselineFiles },
+      p.variants[state.revision],
+    );
+    const target = applyVariant({ ...r.baselineFiles }, next);
+    const files = Object.fromEntries(
+      Object.entries(target).filter(
+        ([path, content]) => previous[path] !== content,
+      ),
+    );
+    const deletes = Object.keys(previous).filter((path) => !(path in target));
     const commit = await gh.commit(
       root,
       state.head,
-      next.files,
+      files,
       "Community revision",
+      deletes,
     );
     this.store.db
       .prepare(
@@ -465,10 +503,90 @@ export class Game {
       !comments.some((x) => x.body?.includes(marker) && x.user?.type === "Bot")
     )
       await gh.post(root + "/issues/" + r.master + "/comments", {
-        body: debrief(r) + "\n\n" + communityUpdate(r) + "\n\n" + marker,
+        body:
+          debrief(r) +
+          "\n\n" +
+          communityUpdate(r) +
+          (scenarioFor(r).next
+            ? "\n\nComment `/game next` here to start the next stage from its authored snapshot. This stage remains on its current branch and its result is frozen."
+            : "") +
+          "\n\n" +
+          marker,
       });
+    // GitHub closing keywords only close issues on the default branch. Later
+    // authored stages use their own branches, so reflect verified delivery here.
+    if (r.scenario) {
+      for (const id of r.result!.complete)
+        await gh.patch(root + "/issues/" + r.issues[id], { state: "closed" });
+      if (r.result!.success)
+        await gh.patch(root + "/milestones/" + r.milestone, {
+          state: "closed",
+        });
+    }
     r.phase = "finished";
     this.store.save(r);
+  }
+  async nextStage(r: Run, gh: GitHub) {
+    const stage = scenarioFor(r);
+    if (!stage.next) {
+      await this.notice(
+        r,
+        gh,
+        "campaign-complete",
+        "You have reached the end of this scenario. Your decisions and debriefs are preserved. Start a fresh playthrough from the launch page to try another approach.",
+      );
+      return;
+    }
+    const existing = this.store.all().find((x) => x.previousRun === r.id);
+    if (existing) {
+      if (existing.phase === "seeding") await this.seed(existing);
+      return;
+    }
+    const target = stage.pack.stages.find((s) => s.id === stage.next)!;
+    const root = this.root(r),
+      branch = `play/${r.id}/${target.id}`;
+    let sha: string;
+    try {
+      sha = (await gh.get(root + "/git/ref/heads/" + branch)).object.sha;
+    } catch (error: any) {
+      if (error.status !== 404) throw error;
+      const parent = (await gh.get(root + "/git/ref/heads/" + r.base)).object
+        .sha;
+      const files = await gh.tree(root, parent);
+      const commit = await gh.commit(
+        root,
+        parent,
+        target.baseline,
+        "Begin " + target.title,
+        Object.keys(files).filter((path) => !(path in target.baseline)),
+      );
+      await gh.post(root + "/git/refs", {
+        ref: "refs/heads/" + branch,
+        sha: commit.sha,
+      });
+      sha = commit.sha;
+    }
+    if (!equal(await gh.tree(root, sha), target.baseline))
+      throw Error("Next-stage branch was changed before setup");
+    const next: Run = {
+      id: r.id + "-" + target.id,
+      installation: r.installation,
+      repository: r.repository,
+      owner: r.owner,
+      repo: r.repo,
+      player: r.player,
+      phase: "seeding",
+      issues: {},
+      prs: {},
+      findings: {},
+      previousRun: r.id,
+      master: r.master,
+      base: branch,
+      baseline: sha,
+      scenario: selectScenario(stage.pack, target.id),
+    };
+    this.store.save(next);
+    await this.seed(next);
   }
   async process(event: string, payload: any) {
     for (const r of this.store.all()) {
@@ -483,6 +601,21 @@ export class Game {
         r.phaseBeforeAccessLoss = r.phase;
         r.phase = "inaccessible";
         this.store.save(r);
+        continue;
+      }
+      if (
+        r.phase === "finished" &&
+        event === "issue_comment" &&
+        payload.action === "created" &&
+        payload.repository?.id === r.repository &&
+        payload.issue?.number === r.master &&
+        payload.comment?.user?.id === r.player &&
+        command(payload.comment.body)?.kind === "next"
+      ) {
+        // Only the latest stage responds; old stages share the same story hub.
+        const child = this.store.all().find((x) => x.previousRun === r.id);
+        if (!child || child.phase === "seeding")
+          await this.nextStage(r, await this.connect(r));
         continue;
       }
       const accessRestored =
@@ -512,6 +645,9 @@ export class Game {
         await this.publish(r, gh);
         continue;
       }
+      const { proposals } = scenarioFor(r);
+      const variant = (id: string, revision: number) =>
+        authoredVariant(r, id, revision);
       await this.recoverRevision(r, gh);
       await this.humanTouches(r, gh);
       await this.reconcile(r, gh);

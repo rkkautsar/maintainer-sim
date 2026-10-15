@@ -1,14 +1,18 @@
 # Maintainer Sim
 
-A GitHub-native review training MVP. A GitHub App seeds a small full-stack TypeScript noticeboard with one milestone, three issues, six community PRs, and Game Master issue #1, which tells the Saturday-launch story and links the milestone and contributions. Players make native review/merge/close decisions. Prepared revisions and authored outcome scoring keep the game deterministic; optional Jev matching assesses review concerns.
+A GitHub-native maintainer training game. Choose a scenario, create a playthrough in your own account, and review contributions using native GitHub reviews, merges, and closes. Versioned scenario repositories provide the runnable app, story, prepared revisions, portraits, and deterministic rubric. Optional Jev matching assesses review concerns within a global budget.
+
+The first packaged scenario is **Forum**: two stages, five initial roadmap issues, ten launch PRs, and a later notification release. Source code and authoring branches live in `rkkautsar/forum-scenario`. The original Pocket Board scenario remains available for legacy runs.
 
 ## Player quickstart
 
-1. Create a fresh repository using [Pocket Board's template](https://github.com/rkkautsar/pocket-board-template).
-2. Install the configured Maintainer Sim GitHub App on that repository, or add it to an existing installation.
-3. Open Game Master issue **#1** when automatic setup finishes.
+1. Open [Maintainer Sim](https://maintainer-sim.rkkautsar.workers.dev/).
+2. Choose a scenario, connect GitHub, and confirm a new personal repository name and visibility.
+3. Wait for preparation, then open Game Master issue **#1**.
 
-No operator CLI or Actions setting change is needed for this hosted flow. App registration, Worker secrets, and webhook delivery must be configured first. The CLI below remains for local development and operator recovery.
+The launch flow needs the GitHub App authorization/creation settings described in [launch configuration](docs/LAUNCH.md). Until configured, the page displays the scenario with connection disabled. No template copy is required for this flow.
+
+The legacy [Pocket Board template](https://github.com/rkkautsar/pocket-board-template) still works: create a fresh repository from it, then install/add Maintainer Sim access to start automatically. The Pocket Board-specific CLI and walkthrough examples below are retained for compatibility. New scenarios use the [authoring guide](docs/AUTHORING.md).
 
 ## Run locally
 
@@ -187,3 +191,13 @@ Create a fresh repository from `rkkautsar/pocket-board-template`, then install t
 Before creating any milestone, issue or PR, onboarding checks the exact public baseline and that the repository has no existing issues/PRs. The template itself, archived repositories, unrelated codebases, and repositories already in a run are skipped. Retried setup resumes without duplicate stage objects. Actions may stay enabled. The operator seed CLI remains available for troubleshooting.
 
 Automatic onboarding requires the GitHub App registration, installation webhook delivery, and App secrets to be configured in the Worker; publishing a template alone cannot grant repository access.
+
+## Scenario repositories and the launch page
+
+The Worker now serves a launch page at `/`. Players choose a scenario, connect GitHub, and create a personal playthrough repository without copying a template. GitHub App OAuth/client-secret and repository-creation permissions must be configured before this flow is available; see [launch configuration](docs/LAUNCH.md).
+
+The first packaged scenario is **Forum**, a runnable community forum with posts, comments and SQLite. Its first stage has five roadmap issues and ten contributions: competing voting/search approaches, comment editing, pagination, bookmarks, and three unsolicited improvements. A second stage introduces personal reply notifications. Contributions include API/UI changes and plausible tests, with authored defect witnesses and bounded prepared revisions. Character portraits appear inside App-authored PRs and comments.
+
+Author scenarios as real repositories with `__scenario__` Markdown/YAML and branches such as `stage/launch/base`, `stage/launch/comment-edit/initial`, and `stage/launch/comment-edit/rev-1`. See the [authoring guide](docs/AUTHORING.md). `npm run scenario -- validate REPO` checks structure and refs; `publish` writes an immutable package; `preview` exports a local runnable snapshot and review document. Publishing never executes source code.
+
+The runtime resolves content through `src/packages.ts`; new runs pin scenario ID, version, stage and digest. The original Pocket Board package remains the fallback for legacy runs. Keep released package files when publishing a new version. Player history contains only clean application code, not `__scenario__`, rubrics, future fixes or authoring commits. After a packaged stage finishes, comment `/game next` in Game Master issue #1 to advance while preserving prior work and results.

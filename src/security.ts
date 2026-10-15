@@ -11,7 +11,12 @@ export function validSignature(
 }
 export function command(
   body: string,
-): { kind: "finish" } | { kind: "revise"; number: number } | undefined {
+):
+  | { kind: "finish" }
+  | { kind: "next" }
+  | { kind: "revise"; number: number }
+  | undefined {
+  if (body.trim() === "/game next") return { kind: "next" as const };
   if (body.trim() === "/game finish") return { kind: "finish" };
   const m = /^\/game revise ([1-9][0-9]*)$/.exec(body.trim());
   if (m) return { kind: "revise", number: Number(m[1]) };

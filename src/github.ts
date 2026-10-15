@@ -63,21 +63,49 @@ export class GitHub {
     }
     return files;
   }
-  async commit(
+  async initialCommit(
     root: string,
-    parent: string,
     files: Record<string, string>,
     message: string,
   ) {
-    const base = await this.get(root + "/git/commits/" + parent);
     const tree = await this.post(root + "/git/trees", {
-      base_tree: base.tree.sha,
       tree: Object.entries(files).map(([path, content]) => ({
         path,
         mode: "100644",
         type: "blob",
         content,
       })),
+    });
+    return this.post(root + "/git/commits", {
+      message,
+      tree: tree.sha,
+      parents: [],
+    });
+  }
+  async commit(
+    root: string,
+    parent: string,
+    files: Record<string, string>,
+    message: string,
+    deletes: string[] = [],
+  ) {
+    const base = await this.get(root + "/git/commits/" + parent);
+    const tree = await this.post(root + "/git/trees", {
+      base_tree: base.tree.sha,
+      tree: [
+        ...Object.entries(files).map(([path, content]) => ({
+          path,
+          mode: "100644",
+          type: "blob",
+          content,
+        })),
+        ...deletes.map((path) => ({
+          path,
+          mode: "100644",
+          type: "blob",
+          sha: null,
+        })),
+      ],
     });
     return await this.post(root + "/git/commits", {
       message,

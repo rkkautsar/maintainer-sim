@@ -1,4 +1,5 @@
 import { issues, proposals } from "./scenario.ts";
+import { scenarioFor, publicCharacter, renderLinks } from "./packages.ts";
 import type { Run, Assessment } from "./types.ts";
 export const stageTitle = "Stage 1 — The Saturday launch";
 export const contributorNotes: Record<string, string> = {
@@ -10,6 +11,7 @@ export const contributorNotes: Record<string, string> = {
   f: "Jo, a weekend contributor: “People want to see recently updated posts first. I added a sorting helper while looking through the library.”",
 };
 export function storyBody(run: Run): string {
+  if (run.scenario) return packageStory(run);
   const lines = [
     `# ${stageTitle}`,
     "",
@@ -52,7 +54,15 @@ export function storyBody(run: Run): string {
   );
   return lines.join("\n");
 }
-export function storyEnding(result: Assessment): string {
+export function storyEnding(result: Assessment, run?: Run): string {
+  if (run?.scenario) {
+    const s = scenarioFor(run);
+    return result.success === null
+      ? s.endings.partial
+      : result.success
+        ? s.endings.success
+        : s.endings.incomplete;
+  }
   if (result.success === null)
     return "The stage is complete. Some contributions or repository changes fall outside the prepared scenario, so the debrief covers only the decisions we can assess. Lina needs a manual check of the unverified launch requirements before announcing the release.";
   if (result.success)
@@ -67,6 +77,14 @@ export const followups: Record<string, string> = {
   d: "**Priya:** “One detail from our app: the page and size fields start as URL parameters before being converted to numbers. Most residents use the buttons, but people also share edited links. That is the path I would check as well as the normal first page.”",
 };
 export function revisionReply(run: Run, id: string): string {
+  if (run.scenario) {
+    const p = scenarioFor(run).proposals.find((p) => p.id === id)!;
+    return (
+      publicCharacter(run, p.character) +
+      (p.variants[run.prs[id].revision].reply ??
+        "I have pushed the prepared revision. Please take another look.")
+    );
+  }
   const identified = (run.findings[id] ?? []).some(
     (f) =>
       f.revision === 0 && ["identified", "consequence"].includes(f.category),
@@ -84,6 +102,7 @@ export function revisionReply(run: Run, id: string): string {
 }
 export function communityUpdate(run: Run): string {
   const result = run.result!;
+  if (run.scenario) return storyEnding(result, run);
   const lines = ["## Community update", ""];
   if (result.success === null)
     lines.push(
@@ -125,4 +144,42 @@ export function communityUpdate(run: Run): string {
     "These are scripted story responses to your decisions. They do not add points or claim that your review text was assessed.",
   );
   return lines.join("\n");
+}
+
+export function contributorNote(run: Run, id: string) {
+  if (!run.scenario) return contributorNotes[id] ?? "";
+  return publicCharacter(
+    run,
+    scenarioFor(run).proposals.find((p) => p.id === id)?.character,
+  );
+}
+export function followup(run: Run, id: string) {
+  if (!run.scenario) return followups[id];
+  const p = scenarioFor(run).proposals.find((p) => p.id === id);
+  return p?.followup
+    ? publicCharacter(run, p.character) + p.followup
+    : undefined;
+}
+function packageStory(run: Run) {
+  const stage = scenarioFor(run);
+  return renderLinks(
+    [
+      `# ${stage.title}`,
+      stage.intro,
+      run.base
+        ? `[Browse the current stage code](https://github.com/${run.owner}/${run.repo}/tree/${encodeURIComponent(run.base)}) — branch \`${run.base}\`. Pull this branch and restart the local app after merging.`
+        : "",
+      "## This milestone",
+      ...stage.issues.map((i) => `- #${run.issues[i.id] ?? "?"}: ${i.title}`),
+      "## Contributions",
+      ...stage.proposals.map(
+        (p) => `- #${run.prs[p.id]?.number ?? "?"}: ${p.title}`,
+      ),
+      "## Playing",
+      "Review, merge, close, or request changes using GitHub. You do not need to write code. Contributor portraits identify fictional characters; all posts come from the game App.",
+      "The stage ends when every scenario PR is closed. Comment `/game finish` here to release early. To request a prepared revision when automatic review matching is unavailable, comment `/game revise <PR-number>` here. Revisions are limited and requesting one alone does not earn concern credit.",
+      "Unsupported code changes do not stop the stage: affected assessments are marked unscored.",
+    ].join("\n\n"),
+    run,
+  );
 }

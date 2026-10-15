@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { findPackage, selectScenario } from "../src/packages.ts";
 import { Game } from "../src/game.ts";
 import { Store } from "../src/store.ts";
 import { baseline, proposals } from "../src/scenario.ts";
@@ -41,9 +42,16 @@ class Fake {
   async tree(_root: string, sha: string) {
     return this.files[sha];
   }
-  async commit(_root: string, parent: string, files: Record<string, string>) {
+  async commit(
+    _root: string,
+    parent: string,
+    files: Record<string, string>,
+    _message?: string,
+    deletes: string[] = [],
+  ) {
     const sha = "commit" + ++this.commits;
     this.files[sha] = { ...this.files[parent], ...files };
+    for (const path of deletes) delete this.files[sha][path];
     return { sha };
   }
   async post(path: string, body: any) {
@@ -57,7 +65,7 @@ class Fake {
       return m;
     }
     if (path.endsWith("/issues")) {
-      const i = { ...body, number: 1 + this.issues.length };
+      const i = { ...body, number: 1 + this.issues.length + this.prs.length };
       this.issues.push(i);
       return i;
     }
@@ -80,6 +88,15 @@ class Fake {
     throw new Error(path);
   }
   async patch(path: string, body: any) {
+    if (path.includes("/milestones/")) {
+      Object.assign(
+        this.milestones.find(
+          (m) => m.number === Number(path.split("/").at(-1)),
+        ),
+        body,
+      );
+      return {};
+    }
     if (path.includes("/issues/")) {
       const issue = this.issues.find(
         (i) => i.number === Number(path.split("/").at(-1)),
@@ -104,10 +121,10 @@ class Fake {
     const sha = "merged" + ++this.commits;
     this.files.final = expectedFiles(r);
     this.files[sha] = this.files.final;
-    this.refs.main = sha;
+    this.refs[r.base ?? "main"] = sha;
   }
 }
-async function setup() {
+async function setup(selection?: Run["scenario"]) {
   const s = new Store(":memory:"),
     fake = new Fake(),
     game = new Game(s, async () => fake as unknown as GitHub);
@@ -119,6 +136,14 @@ async function setup() {
     repo: "game",
     player: 3,
   });
+  if (selection) {
+    r.scenario = selection;
+    fake.files.baseline = {
+      ...findPackage(selection.id, selection.version).stages.find(
+        (s) => s.id === selection.stage,
+      )!.baseline,
+    };
+  }
   s.save(r);
   await game.seed(r);
   return { s, fake, game, r };
@@ -682,6 +707,60 @@ test("repository comparison limits produce a partial debrief without blocking fi
     assert.ok(
       finished.result?.warnings?.some((w) => w.includes("exercise limits")),
     );
+  } finally {
+    s.close();
+  }
+});
+
+test("published forum runs resolve their own content and advance idempotently", async () => {
+  const pack = findPackage("forum", "0.1.0"),
+    { s, fake, game, r } = await setup(selectScenario(pack));
+  try {
+    assert.equal(Object.keys(r.prs).length, 10);
+    assert.ok(fake.issues[0].body.includes("group chat"));
+    assert.ok(fake.prs.some((p) => p.body.includes("/portraits/")));
+    await game.process("issue_comment", payload(r, "/game finish"));
+    assert.equal(s.get(r.id).result?.maximum, 20);
+    await game.process("issue_comment", payload(r, "/game next"));
+    const child = s.all().find((x) => x.previousRun === r.id)!;
+    assert.equal(child.scenario?.stage, "growing");
+    assert.equal(child.phase, "active");
+    assert.equal(child.master, 1);
+    assert.equal(s.get(r.id).phase, "finished");
+    assert.equal(fake.refs.main, "baseline");
+    assert.ok(child.base?.startsWith("play/"));
+    assert.equal(Object.keys(child.prs).length, 1);
+    await game.process("issue_comment", payload(r, "/game next"));
+    assert.equal(s.all().length, 2);
+  } finally {
+    s.close();
+  }
+});
+
+test("interrupted next-stage seeding resumes on repeated next command", async () => {
+  const { s, fake, game, r } = await setup(
+    selectScenario(findPackage("forum", "0.1.0")),
+  );
+  try {
+    await game.process("issue_comment", payload(r, "/game finish"));
+    const post = fake.post.bind(fake);
+    let fail = true;
+    fake.post = async (path: string, body: any) => {
+      if (fail && path.endsWith("/pulls")) {
+        fail = false;
+        throw Object.assign(Error("Temporary GitHub failure"), { status: 503 });
+      }
+      return post(path, body);
+    };
+    await assert.rejects(
+      game.process("issue_comment", payload(r, "/game next")),
+      /Temporary/,
+    );
+    assert.equal(s.all().find((x) => x.previousRun === r.id)?.phase, "seeding");
+    await game.process("issue_comment", payload(r, "/game next"));
+    const child = s.all().find((x) => x.previousRun === r.id)!;
+    assert.equal(child.phase, "active");
+    assert.equal(s.all().length, 2);
   } finally {
     s.close();
   }
