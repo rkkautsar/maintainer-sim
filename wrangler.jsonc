@@ -48,7 +48,7 @@
     "AI_DAILY_BUDGET_USD": "1",
     "GITHUB_CLIENT_ID": "Iv23liIU7hVd8ynBoZN4",
     "GITHUB_APP_SLUG": "maintainer-sim",
-    "PUBLIC_ORIGIN": "https://maintainer-sim.rkkautsar.workers.dev",
+    "PUBLIC_ORIGIN": "https://pr-flood.lol",
   },
   "observability": {
     "enabled": true,

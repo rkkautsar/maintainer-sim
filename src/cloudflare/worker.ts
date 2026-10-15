@@ -60,6 +60,19 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       const url = new URL(request.url);
+      if (
+        request.method === "GET" &&
+        env.PUBLIC_ORIGIN &&
+        url.hostname.endsWith(".workers.dev") &&
+        url.origin !== new URL(env.PUBLIC_ORIGIN).origin &&
+        (["/", "/about", "/setup", "/auth/start"].includes(url.pathname) ||
+          url.pathname.startsWith("/scenarios/"))
+      ) {
+        return Response.redirect(
+          new URL(url.pathname + url.search, env.PUBLIC_ORIGIN),
+          308,
+        );
+      }
       const launcher = await launchRoute(request, env);
       if (launcher) {
         const response = new Response(launcher.body, launcher);
@@ -129,9 +142,7 @@ export default {
         const p = preview
           ? await registry(env).pinned({ id: preview[1], version: preview[2] })
           : undefined;
-        const heading = p
-          ? p.title + " — starting app"
-          : "About Maintainer Sim";
+        const heading = p ? p.title + " — starting app" : "About PR Flood";
         const body = p
           ? "<p>" +
             esc(p.description) +
@@ -140,11 +151,11 @@ export default {
             "</pre><h2>Application files</h2><pre>" +
             esc(Object.keys(p.stages[0].baseline).join("\n")) +
             "</pre>"
-          : "<p>Practise maintaining an open-source project in GitHub. Review contributions, reach a milestone, and learn what your decisions mean for the project.</p><p>Scenarios contain a real runnable app and authored contributions. Contributor names and portraits are fictional; all GitHub posts come from the Maintainer Sim App.</p><p>Start from the launch page, connect GitHub, and choose a new repository in your own account. You can finish early with <code>/game finish</code> and advance after debrief with <code>/game next</code>.</p>";
+          : "<p>Practise maintaining an open-source project in GitHub. Review contributions, reach a milestone, and learn what your decisions mean for the project.</p><p>Scenarios contain a real runnable app and authored contributions. Contributor names and portraits are fictional; all GitHub posts come from the PR Flood App.</p><p>Start from the launch page, connect GitHub, and choose a new repository in your own account. You can finish early with <code>/game finish</code> and advance after debrief with <code>/game next</code>.</p>";
         return new Response(
           '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
             esc(heading) +
-            '</title><style>body{font:16px/1.7 system-ui;max-width:850px;margin:40px auto;padding:24px;background:#f7f6f1;color:#26352b}a{color:#35674a}h1{font:42px Georgia}pre{white-space:pre-wrap;background:white;padding:24px;border:1px solid #dde2d6;border-radius:8px;font-size:13px}</style><a href="/">← Maintainer Sim</a><h1>' +
+            '</title><style>body{font:16px/1.7 system-ui;max-width:850px;margin:40px auto;padding:24px;background:#f7f6f1;color:#26352b}a{color:#35674a}h1{font:42px Georgia}pre{white-space:pre-wrap;background:white;padding:24px;border:1px solid #dde2d6;border-radius:8px;font-size:13px}</style><a href="/">← PR Flood</a><h1>' +
             esc(heading) +
             "</h1>" +
             body +

@@ -14,6 +14,29 @@ const appKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const appPem = appKey.privateKey
   .export({ type: "pkcs8", format: "pem" })
   .toString();
+
+test("the old Worker hostname redirects pages while webhook ingress stays available", async () => {
+  const mf = runtime({ bindings: { PUBLIC_ORIGIN: "https://pr-flood.lol" } });
+  try {
+    const response = await mf.dispatchFetch(
+      "https://maintainer-sim.rkkautsar.workers.dev/auth/start",
+      { redirect: "manual" },
+    );
+    assert.equal(response.status, 308);
+    assert.equal(
+      response.headers.get("location"),
+      "https://pr-flood.lol/auth/start",
+    );
+    const webhook = await mf.dispatchFetch(
+      "https://maintainer-sim.rkkautsar.workers.dev/webhooks",
+      { method: "POST", body: "{}", redirect: "manual" },
+    );
+    assert.equal(webhook.status, 401);
+    assert.equal(webhook.headers.get("location"), null);
+  } finally {
+    await mf.dispose();
+  }
+});
 function registryService(
   options: {
     corrupt?: boolean;
@@ -22,6 +45,15 @@ function registryService(
     delayReleasesMs?: number;
     offline?: () => boolean;
     onGameRepo?: () => void;
+    private?: boolean;
+    oversizedBody?: boolean;
+    metrics?: {
+      appTokenRequests: number;
+      appJwtRequests: number;
+      authHeaders: number;
+      cdnDownloads: number;
+      assetApiDownloads: number;
+    };
   } = {},
 ) {
   const repo = options.repo ?? "rkkautsar/forum-scenario";
@@ -32,6 +64,8 @@ function registryService(
   return async (request: any) => {
     const url = new URL(request.url),
       path = decodeURIComponent(url.pathname);
+    if (options.metrics && request.headers.get("authorization"))
+      options.metrics.authHeaders++;
     if (path === "/repos/owner/game" && request.method === "GET") {
       options.onGameRepo?.();
       return Response.json({
@@ -47,13 +81,22 @@ function registryService(
       ) as any;
     if (options.offline?.() && path.startsWith(`/repos/${repo}/`))
       return new Response("registry offline", { status: 503 }) as any;
-    if (path === `/repos/${repo}/installation`)
+    if (path === `/repos/${repo}` && request.method === "GET") {
+      if (options.private)
+        return Response.json({ message: "Not found" }, { status: 404 }) as any;
+      return Response.json({ private: false }) as any;
+    }
+    if (path === `/repos/${repo}/installation`) {
+      if (options.metrics) options.metrics.appJwtRequests++;
       return Response.json({ id: 171562073 }) as any;
+    }
     if (
       /^\/app\/installations\/\d+\/access_tokens$/.test(path) &&
       request.method === "POST"
-    )
+    ) {
+      if (options.metrics) options.metrics.appTokenRequests++;
       return Response.json({ token: "fixture-installation-token" }) as any;
+    }
     if (path === `/repos/${repo}/releases` && request.method === "GET") {
       if (options.delayReleasesMs)
         await new Promise((resolve) =>
@@ -78,10 +121,32 @@ function registryService(
         },
       ]) as any;
     }
+    const download = new RegExp(
+      `^/${repo.replaceAll("/", "\\/")}/releases/download/v(0\\.1\\.[01])/scenario\\.json$`,
+    ).exec(path);
+    if (download && request.method === "GET") {
+      if (options.metrics) options.metrics.cdnDownloads++;
+      if (options.private)
+        return new Response("private download unavailable", {
+          status: 404,
+        }) as any;
+      if (options.oversizedBody)
+        return new Response(new Uint8Array(1_900_001), {
+          headers: { "content-type": "application/json" },
+        }) as any;
+      const pack = packages[download[1] === "0.1.0" ? 0 : 1];
+      const body: any = structuredClone(pack);
+      if (options.corrupt && download[1] === "0.1.1")
+        body.digest = "0".repeat(64);
+      return new Response(JSON.stringify(body), {
+        headers: { "content-type": "application/json" },
+      }) as any;
+    }
     const asset = new RegExp(
       `^/repos/${repo.replaceAll("/", "\\/")}/releases/assets/(100|101)$`,
     ).exec(path);
     if (asset && request.method === "GET") {
+      if (options.metrics) options.metrics.assetApiDownloads++;
       const pack = assetIds.get(Number(asset[1]))!;
       const body: any = structuredClone(pack);
       if (options.corrupt && asset[1] === "101") body.digest = "0".repeat(64);
@@ -273,6 +338,107 @@ test("release registry exposes latest public metadata without package internals"
       ).status,
       404,
     );
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("anonymous rate limits do not block an authenticated private source", async () => {
+  for (const status of [403, 429]) {
+    const repo = `rkkautsar/private-rate-${status}`;
+    const service = registryService({ repo, private: true });
+    const mf = runtime({
+      bindings: { SCENARIO_REPOSITORIES: repo },
+      outboundService: async (request: any) => {
+        if (new URL(request.url).pathname === `/repos/${repo}`)
+          return Response.json(
+            { message: "Rate limit exceeded" },
+            { status },
+          ) as any;
+        return service(request);
+      },
+    });
+    try {
+      assert.equal(
+        (await mf.dispatchFetch("https://app/api/scenarios")).status,
+        200,
+      );
+    } finally {
+      await mf.dispose();
+    }
+  }
+});
+
+test("public release downloads use anonymous CDN access without App secrets", async () => {
+  const metrics = {
+    appTokenRequests: 0,
+    appJwtRequests: 0,
+    authHeaders: 0,
+    cdnDownloads: 0,
+    assetApiDownloads: 0,
+  };
+  const mf = runtime({
+    bindings: { GITHUB_APP_ID: "", GITHUB_PRIVATE_KEY: "" },
+    outboundService: registryService({ metrics }),
+  });
+  try {
+    const response = await mf.dispatchFetch("https://app/api/scenarios");
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as any[];
+    assert.equal(body[0].version, "0.1.1");
+    assert.equal(metrics.appTokenRequests, 0);
+    assert.equal(metrics.appJwtRequests, 0);
+    assert.equal(metrics.authHeaders, 0);
+    assert.equal(metrics.cdnDownloads, 1);
+    assert.equal(metrics.assetApiDownloads, 0);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("private source repositories fall back to App-authenticated asset downloads", async () => {
+  const metrics = {
+    appTokenRequests: 0,
+    appJwtRequests: 0,
+    authHeaders: 0,
+    cdnDownloads: 0,
+    assetApiDownloads: 0,
+  };
+  const mf = runtime({
+    outboundService: registryService({ metrics, private: true }),
+  });
+  try {
+    const response = await mf.dispatchFetch("https://app/api/scenarios");
+    assert.equal(response.status, 200);
+    assert.equal(metrics.appTokenRequests, 1);
+    assert.equal(metrics.appJwtRequests, 1);
+    assert.equal(metrics.cdnDownloads, 0);
+    assert.equal(metrics.assetApiDownloads, 1);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("public CDN body exceeding the package limit is rejected", async () => {
+  const metrics = {
+    appTokenRequests: 0,
+    appJwtRequests: 0,
+    authHeaders: 0,
+    cdnDownloads: 0,
+    assetApiDownloads: 0,
+  };
+  const mf = runtime({
+    bindings: { GITHUB_APP_ID: "", GITHUB_PRIVATE_KEY: "" },
+    outboundService: registryService({ metrics, oversizedBody: true }),
+  });
+  try {
+    const response = await mf.dispatchFetch("https://app/api/scenarios");
+    assert.equal(response.status, 503);
+    assert.equal(metrics.appTokenRequests, 0);
+    assert.equal(metrics.appJwtRequests, 0);
+    assert.equal(metrics.authHeaders, 0);
+    assert.equal(metrics.cdnDownloads, 1);
+    assert.equal(metrics.assetApiDownloads, 0);
   } finally {
     await mf.dispose();
   }

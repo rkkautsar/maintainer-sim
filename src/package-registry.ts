@@ -3,6 +3,33 @@ import { z } from "zod";
 import { GitHub } from "./github.ts";
 import { packageScope, type ScenarioPackage } from "./packages.ts";
 import { parse } from "./validation.ts";
+import { errorStatus } from "./diagnostics.ts";
+
+async function publicRequest(
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+) {
+  const request = new Request(input, init);
+  const edge =
+    typeof caches === "undefined"
+      ? undefined
+      : (caches as CacheStorage & { default?: Cache }).default;
+  const cached = await edge?.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (edge && response.ok) {
+    const copy = new Response(response.clone().body, response);
+    copy.headers.set("cache-control", "public,max-age=300");
+    // Public metadata is shared across cold isolates at the same edge location.
+    // Cache availability must never block a successful source response.
+    try {
+      await edge.put(request, copy);
+    } catch {
+      /* best-effort cache */
+    }
+  }
+  return response;
+}
 
 const id = z.string().regex(/^[a-z][a-z0-9-]{0,47}$/);
 const version = z.string().regex(/^\d+\.\d+\.\d+$/);
@@ -138,6 +165,7 @@ export class GitHubPackageRegistry {
   };
   private tokens = new Map<string, { until: number; api: GitHub }>();
   private packages = new Map<string, ScenarioPackage>();
+  private publicRepositories = new Set<string>();
   private config: RegistryConfig;
   constructor(config: RegistryConfig) {
     this.config = config;
@@ -163,6 +191,37 @@ export class GitHubPackageRegistry {
   private async api(repo: string) {
     const cached = this.tokens.get(repo);
     if (cached && cached.until > Date.now()) return cached.api;
+    const anonymous = new GitHub(undefined, publicRequest);
+    try {
+      const metadata = parse(
+        z.object({ private: z.boolean() }),
+        await anonymous.get(`/repos/${repo}`),
+      );
+      if (!metadata.private) {
+        this.publicRepositories.add(repo);
+        this.tokens.set(repo, {
+          until: Date.now() + 50 * 60000,
+          api: anonymous,
+        });
+        return anonymous;
+      }
+    } catch (error) {
+      const status = errorStatus(error);
+      if (
+        status !== 404 &&
+        !(
+          [403, 429].includes(status ?? 0) &&
+          this.config.GITHUB_APP_ID &&
+          this.config.GITHUB_PRIVATE_KEY
+        )
+      )
+        throw error;
+    }
+    this.publicRepositories.delete(repo);
+    if (!this.config.GITHUB_APP_ID || !this.config.GITHUB_PRIVATE_KEY)
+      throw new Error(
+        "Private scenario repositories require GitHub App credentials and access",
+      );
     const app = GitHub.app(
       this.config.GITHUB_APP_ID,
       this.config.GITHUB_PRIVATE_KEY,
@@ -207,7 +266,7 @@ export class GitHubPackageRegistry {
           throw new Error("Scenario registry release limit exceeded");
       }
     }
-    this.metadata = { until: Date.now() + 60000, releases };
+    this.metadata = { until: Date.now() + 5 * 60000, releases };
     return releases;
   }
 
@@ -219,16 +278,41 @@ export class GitHubPackageRegistry {
     const cached = this.packages.get(key);
     if (cached) return cached;
     const api = await this.api(repo);
-    const response = await api.api.request(
-      "GET /repos/{owner}/{repo}/releases/assets/{asset_id}",
-      {
-        owner: repo.split("/")[0],
-        repo: repo.split("/")[1],
-        asset_id: assets[0].id,
-        headers: { accept: "application/octet-stream" },
-      },
-    );
-    const raw: unknown = response.data;
+    let raw: unknown;
+    if (this.publicRepositories.has(repo)) {
+      // Public release downloads use GitHub's asset CDN rather than spending
+      // REST API quota on each package. Never attach App credentials here.
+      const response = await fetch(
+        `https://github.com/${repo}/releases/download/${release.tag_name}/scenario.json`,
+      );
+      if (!response.ok) throw new Error("Scenario package download failed");
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Scenario package download is empty");
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        size += chunk.value.length;
+        if (size > 1900000) {
+          await reader.cancel();
+          throw new Error("Scenario package download exceeds size limit");
+        }
+        chunks.push(chunk.value);
+      }
+      raw = Buffer.concat(chunks);
+    } else {
+      const response = await api.api.request(
+        "GET /repos/{owner}/{repo}/releases/assets/{asset_id}",
+        {
+          owner: repo.split("/")[0],
+          repo: repo.split("/")[1],
+          asset_id: assets[0].id,
+          headers: { accept: "application/octet-stream" },
+        },
+      );
+      raw = response.data;
+    }
     const value =
       typeof raw === "string"
         ? JSON.parse(raw)

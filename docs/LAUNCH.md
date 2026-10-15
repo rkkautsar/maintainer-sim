@@ -4,17 +4,19 @@ Cloudflare serves the launcher directly from `public/index.html`, `public/app.js
 
 The Worker handles the scenario catalog, portrait assets, GitHub App OAuth, and durable launch jobs. Unknown routes return 404 rather than the launcher HTML. No template repository is required. Player-owned repositories start private by default; the player can select public before creation. Personal accounts are supported first. Each authenticated account can create at most five playthroughs per UTC day.
 
-Scenario packages are read from GitHub Releases in private repositories listed by the `SCENARIO_REPOSITORIES` Worker variable, for example `rkkautsar/forum-scenario`. The Worker uses its existing GitHub App installation token to read release metadata and the `scenario.json` asset. Grant the Maintainer Sim App installation Contents read access to every configured scenario repository; authors publish releases there through the version-tag workflow in [the authoring guide](AUTHORING.md). Keep older version releases available for playthroughs already in progress. Each run's Durable Object persists its validated package by digest, so the run keeps resolving the same immutable package.
+Scenario packages are read from GitHub Releases in repositories listed by `SCENARIO_REPOSITORIES`, such as the public `rkkautsar/forum-scenario`. Public sources use anonymous release discovery and GitHub's asset CDN; no App installation or source credential is needed. The catalogue refreshes within five minutes. Private sources use a repository-scoped, Contents-read installation token and must be added to the existing GitHub App installation.
 
-Set `SCENARIO_REPOSITORIES` in `wrangler.jsonc` to the comma-separated `owner/repository` list, such as `rkkautsar/forum-scenario`. Add the scenario repository to the Maintainer Sim App installation's selected repositories. For local development, set the same variable in Wrangler's local vars or `.dev.vars` configuration. This variable names repositories to read; it contains no credential.
+The scenario repository publishes version tags through the trusted workflow in [the authoring guide](AUTHORING.md). Keep older releases available. Each run's Durable Object persists its validated package by digest so an in-progress game can continue during a source outage. Source repositories contain answers and evidence; making them public lets players inspect those answers. Player repositories still exclude `__scenario__` and source history.
 
-Open [Maintainer Sim settings](https://github.com/settings/apps/maintainer-sim) to configure the existing [GitHub App](https://github.com/apps/maintainer-sim). Its [installation page](https://github.com/apps/maintainer-sim/installations/new) grants access to player repositories.
+Set `SCENARIO_REPOSITORIES` in `wrangler.jsonc` to a comma-separated `owner/repository` allowlist. The same variable works for local development; it contains no credential.
+
+Open [PR Flood settings](https://github.com/settings/apps/maintainer-sim) to configure the existing [GitHub App](https://github.com/apps/maintainer-sim). Its [installation page](https://github.com/apps/maintainer-sim/installations/new) grants access to player repositories.
 
 Configure:
 
-- Homepage: `https://maintainer-sim.rkkautsar.workers.dev/`
-- Callback URL: `https://maintainer-sim.rkkautsar.workers.dev/auth/callback`
-- Setup URL: `https://maintainer-sim.rkkautsar.workers.dev/setup`
+- Homepage: `https://pr-flood.lol/`
+- Callback URL: `https://pr-flood.lol/auth/callback`
+- Setup URL: `https://pr-flood.lol/setup`
 - Leave automatic OAuth-during-installation disabled: the launcher initiates its own state/PKCE flow.
 - Permit installation on any account if inviting other players.
 - Keep Contents, Issues and Pull requests write access, Metadata read, and the existing webhook subscriptions.

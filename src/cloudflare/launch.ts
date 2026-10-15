@@ -131,7 +131,7 @@ export class LaunchSession extends DurableObject<Env> {
             409,
           );
         const id = randomUUID(),
-          name = input.name || `maintainer-sim-${pack.id}-${id.slice(0, 8)}`;
+          name = input.name || `pr-flood-${pack.id}-${id.slice(0, 8)}`;
         if (
           typeof name !== "string" ||
           !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/.test(name) ||
@@ -147,6 +147,7 @@ export class LaunchSession extends DurableObject<Env> {
           scenario: pack.id,
           version: pack.version,
           digest: pack.digest,
+          marker: "PR Flood playthrough · " + id,
           name,
           private: input.private,
           state: "creating",

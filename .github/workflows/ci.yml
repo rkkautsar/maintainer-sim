@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: production
-      url: https://maintainer-sim.rkkautsar.workers.dev
+      url: https://pr-flood.lol
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,7 +61,7 @@ jobs:
           npm run cf:deploy
       - name: Verify public deployment
         run: |
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://maintainer-sim.rkkautsar.workers.dev/health
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://maintainer-sim.rkkautsar.workers.dev/api/scenarios
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://maintainer-sim.rkkautsar.workers.dev/app.js > /dev/null
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://maintainer-sim.rkkautsar.workers.dev/style.css > /dev/null
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://pr-flood.lol/health
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://pr-flood.lol/api/scenarios
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://pr-flood.lol/app.js > /dev/null
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 3 https://pr-flood.lol/style.css > /dev/null

@@ -28,18 +28,15 @@ function renderPreviewArt(pack) {
   const window = el("div", null, "mock-window");
   const top = el("div", null, "mock-top");
   const preview = pack.preview ?? { title: pack.title, items: [] };
-  top.append(
-    document.createTextNode(preview.title),
-    el("span", "YOUR COMMUNITY"),
-  );
+  top.append(document.createTextNode(preview.title), el("span", "FIRST STAGE"));
   window.append(top);
 
-  for (const item of preview.items ?? []) {
+  for (const [index, item] of (preview.items ?? []).entries()) {
     const row = el("div", null, "mock-row");
-    const vote = el("div", "↑ 12", "mock-vote");
+    const number = el("span", String(index + 1).padStart(2, "0"), "mock-index");
     const description = document.createElement("div");
     description.append(el("strong", item.title), el("small", item.detail));
-    row.append(vote, description);
+    row.append(number, description);
     window.append(row);
   }
 
@@ -50,9 +47,9 @@ function renderPreviewArt(pack) {
 function renderTags(pack) {
   const tags = el("div", null, "tags");
   for (const text of [
-    pack.stages + " stages",
-    pack.prs + " contributions",
-    "Prepared revisions",
+    `${pack.stages} ${pack.stages === 1 ? "stage" : "stages"}`,
+    `${pack.prs} ${pack.prs === 1 ? "incoming PR" : "incoming PRs"}`,
+    "Played in GitHub",
   ]) {
     tags.append(el("span", text));
   }
@@ -74,7 +71,7 @@ function renderRepositoryForm(pack) {
   const nameLabel = el("label", "Repository name");
   const name = el("input");
   name.name = "name";
-  name.placeholder = "maintainer-sim-" + pack.id;
+  name.placeholder = "pr-flood-" + pack.id;
   name.pattern = "[A-Za-z0-9][A-Za-z0-9_.-]{0,79}";
   name.maxLength = 80;
   nameLabel.append(name);
@@ -116,7 +113,12 @@ async function launchScenario(event, { pack, name, select, button, form }) {
       "Creating your repository and inviting the contributors. This can take a minute or two.",
     ),
   );
-  box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  box.scrollIntoView({
+    block: "nearest",
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth",
+  });
 
   try {
     await call("/api/launch", {
@@ -164,7 +166,7 @@ function renderScenarioCard(pack, session) {
   card.dataset.scenario = pack.id;
   const content = el("div", null, "scene-content");
   content.append(
-    el("span", "COMMUNITY SOFTWARE", "badge"),
+    el("span", "COMMUNITY PROJECT", "badge"),
     el("h2", pack.title),
     el("p", pack.description, "description"),
     renderTags(pack),
@@ -188,8 +190,21 @@ async function load() {
     for (const pack of packs) {
       catalog.append(renderScenarioCard(pack, session));
     }
+    if (!packs.length)
+      catalog.append(
+        el("p", "No project is ready for the queue just yet.", "catalog-empty"),
+      );
+    catalog.setAttribute("aria-busy", "false");
     if (session.user) watch();
   } catch (error) {
+    $("catalog").setAttribute("aria-busy", "false");
+    $("catalog").replaceChildren(
+      el(
+        "p",
+        "The project inbox is taking a breather. Try refreshing in a moment.",
+        "catalog-empty",
+      ),
+    );
     $("error").textContent = error.message;
   }
 }
@@ -221,7 +236,7 @@ function renderJobLinks(box, job) {
     const link = el(
       "a",
       job.state === "ready"
-        ? "Start playing — open Game Master issue #1 ↗"
+        ? "Open your review queue — issue #1 ↗"
         : "Open repository ↗",
       "button",
     );

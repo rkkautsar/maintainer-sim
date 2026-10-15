@@ -24,7 +24,7 @@ export async function userRequest<T>(
       authorization: "Bearer " + token,
       accept: "application/vnd.github+json",
       "content-type": "application/json",
-      "user-agent": "maintainer-sim",
+      "user-agent": "pr-flood",
     },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(15000),

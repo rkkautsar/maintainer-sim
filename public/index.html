@@ -3,63 +3,171 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Maintainer Sim — Choose what ships.</title>
+    <meta name="theme-color" content="#f7f5ef" />
+    <meta
+      name="description"
+      content="A small project. A growing inbox. Practice the human side of software maintenance in GitHub."
+    />
+    <link rel="canonical" href="https://pr-flood.lol/" />
+    <meta property="og:title" content="PR Flood — Pick up the queue." />
+    <meta
+      property="og:description"
+      content="Review real contributions, decide what ships, and see what your choices mean for the project."
+    />
+    <meta property="og:url" content="https://pr-flood.lol/" />
+    <title>PR Flood — Pick up the queue.</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <header>
-      <div class="brand">maintainer<span> / sim</span></div>
-      <a href="/about">About the project ↗</a>
+    <header class="site-header">
+      <a class="brand" href="https://pr-flood.lol/" aria-label="PR Flood home">
+        <span class="brand-mark" aria-hidden="true">PR</span>
+        <span>Flood</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#how-it-works">How it works</a>
+        <a href="https://pr-flood.lol/about"
+          >About <span aria-hidden="true">↗</span></a
+        >
+      </nav>
     </header>
+
     <main>
-      <div class="hero">
-        <div>
-          <div class="eyebrow">THE OTHER SIDE OF THE PULL REQUEST</div>
-          <h1>Someone has to<br />decide what ships.</h1>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">
+            <span class="status-dot"></span> A CODE REVIEW GAME, PLAYED IN
+            GITHUB
+          </p>
+          <h1 id="hero-title">
+            The PRs are coming.<br /><em>Someone has to review them.</em>
+          </h1>
+          <p class="hero-description">
+            An inbox full of AI-generated PRs. Helpful fixes, hidden bugs, and
+            very ambitious abstractions. Step in as maintainer and decide what
+            ships.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#catalog">
+              Pick up the queue <span aria-hidden="true">↓</span>
+            </a>
+            <span class="hero-note">Played in GitHub · No coding required</span>
+          </div>
         </div>
-        <p>
-          Take over a small open-source project.<br />Review the contributions.
-          Ask the awkward questions.<br />Help a community build something worth
-          maintaining.
-        </p>
-      </div>
-      <div class="divider"></div>
-      <div class="section-label">
-        Choose your project<span>Play in GitHub · No code required</span>
-      </div>
-      <div id="catalog"></div>
-      <p id="error" role="alert"></p>
-      <section id="progress" hidden aria-live="polite"></section>
-      <div class="steps">
-        <div>
-          <small>01 / TAKE THE KEYS</small>
-          <h3>A real repository. A community to care for.</h3>
+
+        <aside
+          class="inbox-art"
+          aria-label="Illustration of a pull request inbox"
+        >
+          <div class="inbox-topline">
+            <span class="inbox-brand"
+              ><span aria-hidden="true">↳</span> INCOMING</span
+            >
+            <span class="inbox-open"
+              ><span class="status-dot"></span> QUEUE OPEN</span
+            >
+          </div>
+          <div class="inbox-heading">
+            <span>THE PROJECT INBOX</span>
+            <h2>Good ideas.<br />Questions, too.</h2>
+          </div>
+          <div class="inbox-stack" aria-hidden="true">
+            <div class="inbox-card inbox-card-back">
+              <span class="card-glyph">+</span><span>Something extra</span>
+              <small>FEATURE</small>
+            </div>
+            <div class="inbox-card inbox-card-middle">
+              <span class="card-glyph">↻</span><span>A small fix</span>
+              <small>BUG FIX</small>
+            </div>
+            <div class="inbox-card inbox-card-front">
+              <span class="card-glyph">↗</span><span>One more approach</span>
+              <small>OPEN PR</small>
+            </div>
+          </div>
+          <div class="inbox-foot">
+            <span>READ THE CHANGE</span>
+            <span class="foot-arrow" aria-hidden="true">→</span>
+            <span>MAKE THE CALL</span>
+          </div>
+          <p class="art-caption">
+            A helpful fix. A new feature. A suspiciously clever abstraction.
+          </p>
+        </aside>
+      </section>
+
+      <section class="scenario-section" aria-labelledby="scenario-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">FIRST, PICK A PROJECT</p>
+            <h2 id="scenario-heading">Every inbox has a story.</h2>
+          </div>
           <p>
-            Start with a working app and a release people are waiting for. Your
-            playthrough lives in your own GitHub account.
+            Real app. Real GitHub decisions.<br />Your own playthrough
+            repository.
           </p>
         </div>
-        <div>
-          <small>02 / READ BETWEEN THE LINES</small>
-          <h3>Every contribution asks for a decision.</h3>
+        <div class="section-rule"><span></span></div>
+        <div id="catalog" aria-live="polite" aria-busy="true"></div>
+        <p id="error" role="alert"></p>
+        <section id="progress" hidden aria-live="polite"></section>
+      </section>
+
+      <section
+        id="how-it-works"
+        class="steps-section"
+        aria-labelledby="steps-heading"
+      >
+        <div class="steps-intro">
+          <p class="eyebrow">A MAINTAINER'S DAY, IN THREE ACTS</p>
+          <h2 id="steps-heading">From inbox to release.</h2>
           <p>
-            Some changes help. Some hide a subtle bug. Some solve the right
-            problem with too much machinery. Review beyond the diff.
+            A grounded practice run in the everyday decisions that shape a
+            release.
           </p>
         </div>
-        <div>
-          <small>03 / CHOOSE WHAT SHIPS</small>
-          <h3>Merge, request changes, or say no.</h3>
-          <p>
-            Reach the milestone, then get a debrief explaining your decisions
-            and what the next maintainer inherits.
-          </p>
-        </div>
-      </div>
+        <ol class="steps">
+          <li>
+            <span class="step-number">01</span>
+            <div>
+              <h3>See what landed</h3>
+              <p>
+                Meet a project with a working app, a release to prepare, and a
+                queue of contributions.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="step-number">02</span>
+            <div>
+              <h3>Review the whole change</h3>
+              <p>
+                Try the app, read the issue, and look beyond a tidy diff. Good
+                intentions can still bring trouble.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="step-number">03</span>
+            <div>
+              <h3>Merge, ask for changes, or close</h3>
+              <p>
+                Move the project toward its milestone. The debrief shows what
+                your decisions shipped and left behind.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
     </main>
-    <footer>
-      <span>Built for the era of AI-generated contributions.</span
-      ><span>A learning game, played in GitHub.</span>
+
+    <footer class="site-footer">
+      <a class="footer-brand" href="https://pr-flood.lol/">PR Flood</a>
+      <span>A learning game, played in GitHub.</span>
+      <a href="https://pr-flood.lol/about"
+        >About the project <span aria-hidden="true">↗</span></a
+      >
     </footer>
     <script type="module" src="/app.js"></script>
   </body>

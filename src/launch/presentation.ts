@@ -21,8 +21,8 @@ export function publicLaunch(job: Job | undefined, slug = "maintainer-sim") {
     "waiting-access": [
       "Connect the game master",
       job.repository
-        ? "Install or update Maintainer Sim, select your new repository, then return and try again."
-        : "Install Maintainer Sim on your personal GitHub account, then return and try again to create your repository.",
+        ? "Install or update PR Flood, select your new repository, then return and try again."
+        : "Install PR Flood on your personal GitHub account, then return and try again to create your repository.",
     ],
     failed: [
       "Setup needs another try",

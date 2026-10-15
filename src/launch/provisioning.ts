@@ -17,6 +17,9 @@ export async function provisionLaunch(
   env: Env,
   storage: DurableObjectStorage,
 ) {
+  // Persist the visible marker for new launches; older in-flight creation intents
+  // must still match the exact description sent before the rebrand.
+  const marker = job.marker ?? "Maintainer Sim playthrough · " + job.id;
   const pack = await registry(env).pinned(
       { id: job.scenario, version: job.version, digest: job.digest },
       storage,
@@ -64,7 +67,7 @@ export async function provisionLaunch(
       if (existing) {
         if (
           existing.owner?.id === login.user.id &&
-          existing.description === "Maintainer Sim playthrough · " + job.id &&
+          existing.description === marker &&
           Date.parse(existing.created_at ?? "") >= job.createdAt - 60000
         ) {
           job.repository = existing.id;
@@ -87,7 +90,7 @@ export async function provisionLaunch(
             name: job.name,
             private: job.private,
             auto_init: true,
-            description: "Maintainer Sim playthrough · " + job.id,
+            description: marker,
           },
         );
       } catch (error) {
@@ -122,7 +125,7 @@ export async function provisionLaunch(
     }
     if (
       repo.owner?.id !== login.user.id ||
-      repo.description !== "Maintainer Sim playthrough · " + job.id ||
+      repo.description !== marker ||
       (repo.created_at && Date.parse(repo.created_at) < job.createdAt - 60000)
     )
       throw Object.assign(Error("Repository identity mismatch"), {

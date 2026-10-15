@@ -88,8 +88,7 @@ export function publicCharacter(run: Run, id?: string): string {
   const { pack } = scenarioFor(run),
     c = id ? pack.characters[id] : undefined;
   if (!c) return "";
-  const origin =
-    process.env.PUBLIC_ORIGIN ?? "https://maintainer-sim.rkkautsar.workers.dev";
+  const origin = process.env.PUBLIC_ORIGIN ?? "https://pr-flood.lol";
   return `<img src="${origin}/portraits/${pack.digest}/${id}.svg" width="56" height="56" alt="${c.name}" />\n\n**${c.name} · ${c.role}**\n\n`;
 }
 export function renderLinks(text: string, run: Run) {

@@ -37,7 +37,7 @@ The preview command exports a runnable clean baseline and a Markdown review of i
 
 ## One-time CI setup
 
-In the private scenario repository, add two small caller workflows. Replace `MAINTAINER_SIM_SHA` below with the full commit SHA of a maintainer-sim commit that contains the reusable workflow, and use that same SHA for `engine_ref`. The reusable workflow checks out the scenario repository with full history and no saved Git credentials, then runs validation from the trusted engine checkout. Validation needs only read access; the tag caller grants write access for publishing the release assets.
+In the scenario repository, add two small caller workflows. Replace `MAINTAINER_SIM_SHA` below with the full commit SHA of a maintainer-sim commit that contains the reusable workflow, and use that same SHA for `engine_ref`. The reusable workflow checks out the scenario repository with full history and no saved Git credentials, then runs validation from the trusted engine checkout. Validation needs only read access; the tag caller grants write access for publishing the release assets.
 
 `.github/workflows/scenario-check.yml`:
 

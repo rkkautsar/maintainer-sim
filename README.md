@@ -1,8 +1,8 @@
-# Maintainer Sim
+# PR Flood
 
 Practice maintaining a real open-source project through GitHub reviews. Follow the story in Game Master issue #1, inspect competing contributions, request prepared revisions, and decide what to merge or close. Each stage has a milestone, linked issues, unsolicited PRs, and a debrief about delivery, defects, and maintenance costs.
 
-[Play](https://maintainer-sim.rkkautsar.workers.dev/) · [GitHub App](https://github.com/apps/maintainer-sim) · [App settings](https://github.com/settings/apps/maintainer-sim) · [Install App](https://github.com/apps/maintainer-sim/installations/new)
+[Play](https://pr-flood.lol/) · [GitHub App](https://github.com/apps/maintainer-sim) · [App settings](https://github.com/settings/apps/maintainer-sim) · [Install App](https://github.com/apps/maintainer-sim/installations/new)
 
 The first scenario is **Forum**: a runnable Express, React, and SQLite application with five initial roadmap issues, ten launch PRs, and a second notification stage. Its [authoring repository](https://github.com/rkkautsar/forum-scenario) holds real stage and contribution branches. Player repositories contain application code; the game service keeps the rubric and prepared answers.
 
@@ -32,7 +32,7 @@ npm run demo
 
 `npm run format` formats the repository. The launcher is plain HTML, JavaScript, and CSS in `public/`.
 
-`demo` reads the latest scenario release using the configured GitHub App and prints a deterministic debrief without calling an AI service. It requires local App credentials. Tests use compact synthetic scenarios and mocked GitHub calls; `test:cf` builds and exercises the actual Cloudflare runtime. Runnable application and defect evidence tests belong to the scenario repository.
+`demo` reads the latest public scenario release and prints a deterministic debrief without calling an AI service. Private scenario sources require local App credentials. Tests use compact synthetic scenarios and mocked GitHub calls; `test:cf` builds and exercises the actual Cloudflare runtime. Runnable application and defect evidence tests belong to the scenario repository.
 
 Copy `.env.example` to ignored `.env` for local configuration. Never commit credentials. For local Worker development:
 
@@ -68,7 +68,7 @@ stage/launch/comment-edit/initial
 stage/launch/comment-edit/rev-1
 ```
 
-The authoring CLI validates branch diffs and annotations, previews content, and exports clean application code. A pinned Git tag publishes the validated package as a GitHub Release asset in the scenario repository. The Worker reads releases from configured private scenario repositories using its GitHub App installation access, caches packages by digest, and resolves each run by scenario ID, version, stage, and digest. Keep prior releases available while their playthroughs exist. See [the authoring guide](docs/AUTHORING.md) and [release registry setup](docs/LAUNCH.md).
+The authoring CLI validates branch diffs and annotations, previews content, and exports clean application code. A pinned Git tag publishes the validated package as a GitHub Release asset in the scenario repository. The Worker reads public releases anonymously and private releases using its GitHub App installation access, caches packages by digest, and resolves each run by scenario ID, version, stage, and digest. Keep prior releases available while their playthroughs exist. See [the authoring guide](docs/AUTHORING.md) and [release registry setup](docs/LAUNCH.md).
 
 ```bash
 npm run scenario -- validate /path/to/scenario

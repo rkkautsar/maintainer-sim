@@ -6,8 +6,11 @@ import { parse } from "./validation.ts";
 export class GitHub {
   api: Octokit;
   requestCount = 0;
-  constructor(token: string) {
-    this.api = new Octokit({ auth: token, request: { timeout: 15000 } });
+  constructor(token?: string, requestFetch?: typeof fetch) {
+    this.api = new Octokit({
+      auth: token,
+      request: { timeout: 15000, fetch: requestFetch },
+    });
     this.api.hook.wrap("request", async (request, options) => {
       this.requestCount++;
       return request(options);

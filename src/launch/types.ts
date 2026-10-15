@@ -7,6 +7,7 @@ export type Job = {
   scenario: string;
   version: string;
   digest?: string;
+  marker?: string;
   name: string;
   private: boolean;
   state:
