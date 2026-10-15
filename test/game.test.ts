@@ -483,3 +483,28 @@ test("resume verifies content and refuses unsupported edits", async () => {
     s.close();
   }
 });
+
+test("a merge during reconciliation retries instead of pausing the run", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    const get = fake.get.bind(fake);
+    let merged = false;
+    fake.get = async (path: string) => {
+      if (!merged && path.endsWith("/pulls/" + r.prs.a.number)) {
+        merged = true;
+        fake.merge("a", r);
+      }
+      return get(path);
+    };
+    await assert.rejects(
+      game.process("push", payload(r)),
+      /Repository changed during assessment/,
+    );
+    assert.equal(s.get(r.id).phase, "active");
+    await game.process("push", payload(r));
+    assert.equal(s.get(r.id).phase, "active");
+    assert.equal(s.get(r.id).prs.a.outcome, "merged");
+  } finally {
+    s.close();
+  }
+});

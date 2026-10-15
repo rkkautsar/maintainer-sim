@@ -17,6 +17,7 @@ import type { Run } from "./types.ts";
 const equal = (a: Record<string, string>, b: Record<string, string>) =>
   JSON.stringify(Object.entries(a).sort()) ===
   JSON.stringify(Object.entries(b).sort());
+class SnapshotChanged extends Error {}
 export class Game {
   store: Persistence;
   reviewer: Reviewer;
@@ -246,14 +247,12 @@ export class Game {
     const hash = createHash("sha256")
       .update(JSON.stringify(Object.entries(expected).sort()))
       .digest("hex");
-    if (
+    const mismatch =
       (before !== r.tree || hash !== r.contentHash) &&
-      !equal(await gh.tree(root, before), expected)
-    )
-      throw new Error("Unexpected default-branch edits or reversion");
+      !equal(await gh.tree(root, before), expected);
     const after = (await gh.get(root + "/git/ref/heads/" + r.base)).object.sha;
     if (before !== after)
-      throw new Error("Repository changed during assessment");
+      throw new SnapshotChanged("Repository changed during assessment");
     for (const [id, pr] of Object.entries(snapshot)) {
       const latest = await gh.get(root + "/pulls/" + pr.number);
       if (
@@ -261,8 +260,10 @@ export class Game {
         latest.state !== pr.state ||
         latest.merged !== pr.merged
       )
-        throw new Error("PR changed during assessment");
+        throw new SnapshotChanged("PR changed during assessment");
     }
+    if (mismatch)
+      throw new Error("Unexpected default-branch edits or reversion");
     r.tree = before;
     r.contentHash = hash;
     this.store.save(r);
@@ -495,6 +496,7 @@ export class Game {
         }
       } catch (e: any) {
         if (
+          e instanceof SnapshotChanged ||
           e.status === 403 ||
           e.status === 429 ||
           e.status >= 500 ||
