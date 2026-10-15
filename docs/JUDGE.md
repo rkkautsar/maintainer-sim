@@ -26,4 +26,10 @@ The production budget and calibration allowance count Jev inference at the confi
 
 ## Current live result
 
-2026-10-15: the authenticated Cloudflare binding reached Jev but the first request failed with insufficient AI Gateway credits. Gameplay judging remains disabled. No accuracy or per-request usage result was returned.
+2026-10-15: after loading AI Gateway credits, inference succeeded. The live binding wrapped results in `{state: "Completed", result: ...}`; the production parser now explicitly unwraps completed responses and rejects other states.
+
+The 20-case trial used 20,494 input tokens, estimated at $0.000860748 in Jev inference (excluding credit-purchase fees). Raw choices matched 19 of 20 labels. With the existing 0.9 confidence threshold, seven answers were accepted and thirteen stayed unassessed. Only three of ten positive reviews earned concern credit, below the 80% preliminary coverage requirement. No negative example earned credit. One grading-injection example produced the wrong raw choice with low confidence and was rejected by the threshold. Gameplay judging remains disabled pending better calibration; lowering the threshold just to pass this fixture set would not demonstrate reliability.
+
+## Free access alternatives
+
+[OpenCode Console](https://opencode.ai/v2/docs/console/models/) currently lists `jev-1.13-free` as a limited-time free model at its `/inference/v1/systemone` endpoint. This is separate from the Go subscription list. [Vercel AI Gateway](https://vercel.com/docs/ai-gateway/pricing) includes $5/month free credits for eligible models; verify Jev eligibility in its catalog instead of assuming all models qualify. Cloudflare's Workers AI free Neuron allowance is separate from the third-party AI Gateway credit balance used by this integration.

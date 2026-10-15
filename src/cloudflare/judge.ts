@@ -8,6 +8,12 @@ const criteria = {
   identified: "Specifically identifies the expected concern",
   consequence: "Identifies the expected concern and explains its consequence",
 };
+export function unwrapJevResponse(data: any) {
+  // The live AI binding returns a completion envelope; some adapters return the result directly.
+  if (data?.state === "Completed") return data.result;
+  if (typeof data?.state === "string") return undefined;
+  return data;
+}
 export class CloudJudge implements Reviewer {
   env: Env;
   constructor(env: Env) {
@@ -58,11 +64,12 @@ export class CloudJudge implements Reviewer {
             },
           }
         : undefined;
-      const data = await (this.env.AI.run as any)(
+      const raw = await (this.env.AI.run as any)(
         "typesafe/jev",
         input,
         options,
       );
+      const data = unwrapJevResponse(raw);
       const a = data?.answers?.identification;
       let result: Finding["category"] | undefined;
       const probs = a?.probabilities;

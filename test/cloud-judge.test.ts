@@ -84,3 +84,16 @@ test("Cloudflare billing failure falls back without releasing its conservative r
     ["claim"],
   );
 });
+
+test("live Cloudflare completion envelope is parsed and its actual usage settled", async () => {
+  const f = fixture({ state: "Completed", result: response() });
+  assert.equal(await f.judge.evaluate("review", "concern", {}), "consequence");
+  assert.equal(f.calls[1].inputTokens, 500);
+});
+test("incomplete or failed Cloudflare envelopes cannot grant review credit", async () => {
+  for (const state of ["Running", "Failed"]) {
+    const f = fixture({ state, result: response() });
+    assert.equal(await f.judge.evaluate("review", "concern", {}), undefined);
+    assert.equal(f.calls.length, 1);
+  }
+});

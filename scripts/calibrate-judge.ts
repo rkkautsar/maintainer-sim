@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getPlatformProxy } from "wrangler";
-import { CloudJudge } from "../src/cloudflare/judge.ts";
+import { CloudJudge, unwrapJevResponse } from "../src/cloudflare/judge.ts";
 import { findPackage } from "../src/packages.ts";
 import type { Env } from "../src/cloudflare/env.ts";
 // Live, opt-in operator experiment. Uses the production classifier and request format.
@@ -56,8 +56,9 @@ try {
       run: async (...args: any[]) => {
         last = undefined;
         try {
-          last = await (proxy.env.AI.run as any)(...args);
-          return last;
+          const raw = await (proxy.env.AI.run as any)(...args);
+          last = unwrapJevResponse(raw);
+          return raw;
         } catch (error: any) {
           failure = String(error?.message ?? "Inference failed").slice(0, 250);
           throw error;
