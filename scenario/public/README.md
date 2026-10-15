@@ -2,7 +2,7 @@
 
 A small, runnable neighborhood noticeboard: vanilla browser UI, Node.js API, and SQLite persistence. No package dependencies or external services.
 
-Requires Node.js 24 or newer (mise works). From this repository:
+Requires Node.js 24 or newer. From this repository:
 
 ```bash
 npm start

@@ -4,15 +4,14 @@ A GitHub-native review training MVP. A GitHub App seeds a small full-stack TypeS
 
 ## Run locally
 
-Requires the Node runtime declared in `mise.toml`. No global npm or Node installation is needed when using mise.
+Requires Node.js 24 or newer and npm.
 
 ```bash
 cd ~/personal/maintainer-sim
-mise trust
-mise exec -- npm ci --ignore-scripts
-mise exec -- npm run check
-mise exec -- npm test
-mise exec -- npm run demo
+npm ci --ignore-scripts
+npm run check
+npm test
+npm run demo
 ```
 
 The demo shows a completed stage with good decisions and the outcome-only debrief. Tests use local GitHub fixtures and an actual local HTTP server; no GitHub or paid model calls are needed.
@@ -22,7 +21,7 @@ The demo shows a completed stage with good decisions and the outcome-only debrie
 Export **only** the public exercise assets to a new directory:
 
 ```bash
-mise exec -- npm run cli -- export-template /tmp/pocket-board-template
+npm run cli -- export-template /tmp/pocket-board-template
 ```
 
 Initialize that exported directory as a separate Git repository and push it to a disposable player-owned repository. You can mark it as a GitHub template for subsequent players, or fork it. Its root must exactly match the export. Start with no previous issues or PRs (including deleted ones), so Game Master receives #1. Do not copy this game-master repository: `src/scenario.ts` contains the hidden rubric and prepared answers.
@@ -43,15 +42,15 @@ Subscribe to `installation`, `installation_repositories`, `pull_request`, `pull_
 Copy `.env.example` to `.env`; fill App ID, key path, webhook secret, and `DISPOSABLE_REPO_CONFIRMED=true` only after verifying the prerequisites. The App deliberately has no Actions or Administration permissions, so disabled Actions is an operator prerequisite rather than an API-verified check.
 
 ```bash
-mise exec -- npm run cli -- seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_GITHUB_ID
-mise exec -- npm start
+npm run cli -- seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_GITHUB_ID
+npm start
 ```
 
 The seed command prints the run ID before setup. If interrupted, inspect and resume it:
 
 ```bash
-mise exec -- npm run cli -- status
-mise exec -- npm run cli -- resume RUN_ID
+npm run cli -- status
+npm run cli -- resume RUN_ID
 ```
 
 Use numeric repository/user/installation IDs, not names in the numeric arguments. Find installation IDs in App installation settings; repository and user IDs are available in GitHub API responses.
@@ -98,7 +97,7 @@ SQLite in `var/game.sqlite` persists runs, queued deliveries, revision intents, 
 Transient GitHub failures retry at bounded exponential intervals (five attempts), then remain visible in the database. After fixing access/network issues:
 
 ```bash
-mise exec -- npm run cli -- retry-deliveries
+npm run cli -- retry-deliveries
 ```
 
 Interrupted revision publication records the intended commit before updating GitHub; retry reconciles that intent. Interrupted result publication resumes on service startup and finds the existing marked bot comment. GitHub writes cannot be fully transactional: external concurrent edits detected during reconciliation pause the run. Closing/reopening a PR after the final debrief does not alter its frozen result.
@@ -122,8 +121,8 @@ The hosted implementation is in `src/cloudflare/worker.ts` with `wrangler.jsonc`
 Use **Workers Paid for the initial hosted pilot**: seeding and reconciliation can exceed the Free plan's subrequest limit. Infrastructure charges are separate from the AI budget. Idle reconciliation runs every ten minutes, rather than polling each repository every minute. GitHub rate limits still apply.
 
 ```bash
-mise exec -- npm run test:cf
-mise exec -- npm run cf:dev
+npm run test:cf
+npm run cf:dev
 ```
 
 The local runtime tests exercise workerd, real Durable Object SQL, concurrent budget claims, alarms, and RSA signing with a generated test key. External GitHub requests are intercepted; these tests make no paid AI calls. Copy `.dev.vars.example` to `.dev.vars` for local configuration. Local AI bindings may call a remote model when enabled, so leave `JEV_CALIBRATED=false` until you intentionally test the provider.
@@ -131,12 +130,12 @@ The local runtime tests exercise workerd, real Durable Object SQL, concurrent bu
 For deployment, authenticate Wrangler in your own Cloudflare account, then provision secrets:
 
 ```bash
-mise exec -- npx wrangler login
-mise exec -- npx wrangler secret put GITHUB_APP_ID
-mise exec -- npx wrangler secret put GITHUB_PRIVATE_KEY < /path/to/app-private-key.pem
-mise exec -- npx wrangler secret put WEBHOOK_SECRET
-mise exec -- npx wrangler secret put ADMIN_TOKEN
-mise exec -- npm run cf:deploy
+npx wrangler login
+npx wrangler secret put GITHUB_APP_ID
+npx wrangler secret put GITHUB_PRIVATE_KEY < /path/to/app-private-key.pem
+npx wrangler secret put WEBHOOK_SECRET
+npx wrangler secret put ADMIN_TOKEN
+npm run cf:deploy
 ```
 
 `ADMIN_TOKEN` must contain at least 32 random characters. The hosted App private key is a secret string, not a filesystem path. Use a PKCS8 PEM key; convert a GitHub PKCS1 key locally if necessary with `openssl pkcs8 -topk8 -nocrypt -in original.pem -out app-private-key.pem`. Store it outside the project. Change the GitHub App webhook URL to `https://YOUR_WORKER.workers.dev/webhooks`.
@@ -144,9 +143,9 @@ mise exec -- npm run cf:deploy
 Set `WORKER_URL` and `ADMIN_TOKEN` in local `.env`, plus `DISPOSABLE_REPO_CONFIRMED=true` after verifying repository prerequisites. Start and inspect a hosted run:
 
 ```bash
-mise exec -- npm run cf:cli -- seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_ID
-mise exec -- npm run cf:cli -- status INSTALLATION_ID
-mise exec -- npm run cf:cli -- retry INSTALLATION_ID
+npm run cf:cli -- seed INSTALLATION_ID REPOSITORY_ID OWNER REPO PLAYER_ID
+npm run cf:cli -- status INSTALLATION_ID
+npm run cf:cli -- retry INSTALLATION_ID
 ```
 
 Hosted seeding returns a run ID immediately; its durable alarm completes setup. Retry requeues failed jobs without deleting player work. Operator endpoints require the admin token; players use GitHub commands. Status may contain private assessment data and must not be exposed publicly.
@@ -167,7 +166,7 @@ Contributor context appears as two scripted PR follow-ups: Theo explains his rea
 
 ## Run the player app
 
-Pocket Board is now a runnable full-stack exercise: a vanilla browser UI, Node.js API, and SQLite database. From the simulator project, run `mise exec -- npm run board` and open http://localhost:3001. It lists seeded notices and lets demo users create posts before any PR is merged. Likes, editing, and pagination are pending milestone implementations. Restart after merging to load them.
+Pocket Board is now a runnable full-stack exercise: a vanilla browser UI, Node.js API, and SQLite database. From the simulator project, run `npm run board` and open http://localhost:3001. It lists seeded notices and lets demo users create posts before any PR is merged. Likes, editing, and pagination are pending milestone implementations. Restart after merging to load them.
 
 The exported player repository also runs independently with `npm start`, with no package dependencies. Demo user selection is intentionally local role switching, not production authentication; the server binds localhost. Data is stored in ignored `data/board.sqlite`. Runtime files must not be committed into the exercise. The game master does not run submitted code; the player may run their disposable app locally.
 
