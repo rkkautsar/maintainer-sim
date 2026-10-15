@@ -507,6 +507,7 @@ export class LaunchSession extends DurableObject<Env> {
     };
     return {
       id: job.id,
+      scenario: job.scenario,
       state: job.state,
       title: labels[job.state]?.[0],
       message: labels[job.state]?.[1],
