@@ -31,6 +31,7 @@ export type Run = {
   phase: Phase;
   reason?: string;
   baseline?: string;
+  baselineFiles?: Record<string, string>;
   base?: string;
   milestone?: number;
   master?: number;

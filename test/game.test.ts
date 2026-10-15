@@ -442,3 +442,44 @@ test("automatic onboarding leaves unrelated or nonempty repositories untouched",
     }
   }
 });
+
+test("existing run pins its validated baseline across template changes", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    // Model an older run created before baseline snapshots were persisted.
+    delete r.baselineFiles;
+    fake.files.baseline["README.md"] = "Previous template documentation";
+    s.save(r);
+    await game.reconcile(r, fake as unknown as GitHub);
+    assert.equal(
+      s.get(r.id).baselineFiles?.["README.md"],
+      "Previous template documentation",
+    );
+    assert.equal(
+      expectedFiles(s.get(r.id))["README.md"],
+      "Previous template documentation",
+    );
+    assert.equal(s.get(r.id).phase, "active");
+  } finally {
+    s.close();
+  }
+});
+test("resume verifies content and refuses unsupported edits", async () => {
+  const { s, fake, game, r } = await setup();
+  try {
+    r.phase = "paused";
+    r.reason = "Unexpected default-branch edits or reversion";
+    s.save(r);
+    fake.files.changed = { ...fake.files.baseline, "unexpected.ts": "bad" };
+    fake.refs.main = "changed";
+    await assert.rejects(game.resume(r), /Unexpected default-branch/);
+    assert.equal(s.get(r.id).phase, "paused");
+    fake.refs.main = "baseline";
+    await game.resume(r);
+    assert.equal(s.get(r.id).phase, "active");
+    assert.equal(s.get(r.id).reason, undefined);
+    await assert.rejects(game.resume(r), /Only paused/);
+  } finally {
+    s.close();
+  }
+});

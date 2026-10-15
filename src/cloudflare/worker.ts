@@ -93,7 +93,9 @@ export default {
         }
         if (
           request.method === "POST" &&
-          ["/admin/seed", "/admin/retry"].includes(url.pathname)
+          ["/admin/seed", "/admin/retry", "/admin/resume"].includes(
+            url.pathname,
+          )
         ) {
           const input = JSON.parse(
             (await limitedBody(request, 16000)).toString(),
@@ -196,6 +198,24 @@ export class GameSession extends DurableObject<Env> {
         { runId: run.id, status: "queued" },
         { status: 202 },
       );
+    }
+    if (path === "/resume") {
+      if (!Number.isSafeInteger(input.repository) || input.repository <= 0)
+        return new Response("Invalid repository", { status: 400 });
+      const run = this.store
+        .all()
+        .find((r) => r.repository === input.repository);
+      if (!run || run.phase !== "paused")
+        return new Response("No paused run for repository", { status: 409 });
+      try {
+        await this.game.resume(run);
+      } catch {
+        return new Response("Run could not be verified; remains paused", {
+          status: 409,
+        });
+      }
+      await this.ctx.storage.setAlarm(Date.now() + 100);
+      return Response.json({ status: "active", runId: run.id });
     }
     if (path === "/retry") {
       this.store.db

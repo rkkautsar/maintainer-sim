@@ -16,12 +16,15 @@ if (command === "seed") {
   };
 } else if (command === "status") {
   path = "/admin/status?installation=" + encodeURIComponent(args[0]);
+} else if (command === "resume") {
+  path = "/admin/resume";
+  body = { installation: Number(args[0]), repository: Number(args[1]) };
 } else if (command === "retry") {
   path = "/admin/retry";
   body = { installation: Number(args[0]) };
 } else
   throw new Error(
-    "Commands: seed INSTALLATION REPOSITORY OWNER REPO PLAYER, status INSTALLATION, retry INSTALLATION",
+    "Commands: seed INSTALLATION REPOSITORY OWNER REPO PLAYER, status INSTALLATION, retry INSTALLATION, resume INSTALLATION REPOSITORY",
   );
 const response = await fetch(new URL(path, url), {
   method: body ? "POST" : "GET",

@@ -69,6 +69,7 @@ export class Game {
       r.baseline = ref.object.sha;
       this.store.save(r);
     }
+    await this.pinBaseline(r, gh);
     if (!r.milestone) {
       const title = "Pocket Board — " + r.id;
       const existing = (await gh.list(root + "/milestones?state=all")).find(
@@ -138,7 +139,7 @@ export class Game {
       }
       if (
         !equal(await gh.tree(root, head), {
-          ...baseline,
+          ...r.baselineFiles,
           ...p.variants[0].files,
         })
       )
@@ -174,7 +175,26 @@ export class Game {
     r.phase = "active";
     this.store.save(r);
   }
+  async pinBaseline(r: Run, gh: GitHub) {
+    if (!r.baselineFiles) {
+      if (!r.baseline) throw new Error("Run has no validated baseline commit");
+      // Existing runs were validated when created. Read their immutable commit,
+      // never the current default branch or the latest published template.
+      r.baselineFiles = await gh.tree(this.root(r), r.baseline);
+      this.store.save(r);
+    }
+  }
+  async resume(r: Run) {
+    if (r.phase !== "paused") throw new Error("Only paused runs can resume");
+    const gh = await this.connect(r);
+    await this.recoverRevision(r, gh);
+    await this.reconcile(r, gh);
+    r.phase = "active";
+    delete r.reason;
+    this.store.save(r);
+  }
   async reconcile(r: Run, gh: GitHub) {
+    await this.pinBaseline(r, gh);
     const root = this.root(r),
       snapshot: Record<string, any> = {};
     const before = (await gh.get(root + "/git/ref/heads/" + r.base)).object.sha;

@@ -11,7 +11,7 @@ export function initialRun(
   return { ...input, phase: "seeding", issues: {}, prs: {}, findings: {} };
 }
 export function expectedFiles(run: Run): Record<string, string> {
-  const files = { ...baseline };
+  const files = { ...(run.baselineFiles ?? baseline) };
   for (const p of proposals) {
     const state = run.prs[p.id];
     if (state?.outcome === "merged")

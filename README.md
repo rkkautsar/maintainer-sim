@@ -77,7 +77,7 @@ Review the six PRs in GitHub. Issue #1 introduces the Saturday launch, contribut
 
 Only the designated player's commands and reviews are accepted. A review approval is not a merge. Answers and the authored debrief appear at stage finish. Open community improvements can be deferred; missing milestone implementations remain incomplete.
 
-Editing PR branches, changing the baseline, merging both competing implementations, or reverting authored changes pauses scoring. The App preserves work and posts a pause notice. Inspect `status` and restart in a fresh repository; there is no destructive reset command.
+Editing PR branches, changing the baseline, merging both competing implementations, or reverting authored changes pauses scoring. The App preserves work and posts a pause notice. Each run pins its initial file content, so later template updates do not invalidate it. An operator can run `npm run cf:cli -- resume INSTALLATION REPOSITORY` to resume a paused hosted run only after its branches and merged content pass reconciliation. Unsupported changes still prevent resume. For a replay, create a fresh repository; there is no destructive reset command.
 
 ## Optional Jev
 
