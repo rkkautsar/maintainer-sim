@@ -18,6 +18,15 @@ const appPem = appKey.privateKey
 test("the old Worker hostname redirects pages while webhook ingress stays available", async () => {
   const mf = runtime({ bindings: { PUBLIC_ORIGIN: "https://pr-flood.lol" } });
   try {
+    const home = await mf.dispatchFetch(
+      "https://maintainer-sim.rkkautsar.workers.dev/",
+      { redirect: "manual" },
+    );
+    assert.equal(home.status, 308);
+    assert.equal(home.headers.get("location"), "https://pr-flood.lol/");
+    const canonical = await mf.dispatchFetch("https://pr-flood.lol/");
+    assert.equal(canonical.status, 200);
+    assert.match(await canonical.text(), /PR Flood/);
     const response = await mf.dispatchFetch(
       "https://maintainer-sim.rkkautsar.workers.dev/auth/start",
       { redirect: "manual" },
@@ -162,7 +171,14 @@ function runtime(extra: any = {}) {
   return new Miniflare({
     modules: true,
     scriptPath: "var/worker-build/worker.js",
-    assets: { directory: "public", routerConfig: { has_user_worker: true } },
+    assets: {
+      directory: "public",
+      binding: "ASSETS",
+      routerConfig: {
+        has_user_worker: true,
+        invoke_user_worker_ahead_of_assets: true,
+      },
+    },
     compatibilityDate: "2026-01-01",
     compatibilityFlags: ["nodejs_compat"],
     durableObjects: {

@@ -1,4 +1,5 @@
 export interface Env {
+  ASSETS?: Fetcher;
   SCENARIO_REPOSITORIES?: string;
   LAUNCHES?: DurableObjectNamespace;
   GITHUB_CLIENT_ID?: string;

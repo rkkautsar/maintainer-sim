@@ -73,6 +73,8 @@ export default {
           308,
         );
       }
+      if (request.method === "GET" && url.pathname === "/" && env.ASSETS)
+        return env.ASSETS.fetch(request);
       const launcher = await launchRoute(request, env);
       if (launcher) {
         const response = new Response(launcher.body, launcher);
@@ -104,6 +106,7 @@ export default {
               })),
             },
           })),
+          { headers: { "cache-control": "no-store" } },
         );
       const portrait = /^\/portraits\/([a-f0-9]{64})\/([a-z0-9-]+)\.svg$/.exec(
         url.pathname,
@@ -256,6 +259,7 @@ export default {
             ? "Invalid request"
             : "Temporarily unavailable",
         {
+          headers: { "cache-control": "no-store" },
           status:
             error instanceof SyntaxError || error instanceof InvalidData
               ? 400
