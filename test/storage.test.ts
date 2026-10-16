@@ -54,13 +54,33 @@ test("delivery failures persist safe categories and can be retried", () => {
       );
       now += 100_000;
     }
+    store.enqueue("seed-delivery", "seed", "{}");
+    const seedError = Object.assign(new Error("private GitHub response"), {
+      step: "create_milestone",
+    });
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const delivery = store.nextDelivery(now);
+      assert.ok(delivery);
+      store.failDelivery(delivery, seedError, now);
+      now += 100_000;
+    }
     assert.equal(store.hasFailed("delivery"), true);
-    const [failure] = store.failures();
+    assert.equal(store.hasFailed("seed-delivery"), true);
+    const failures = store.failures();
+    const failure = failures.find((item) => item.id === "delivery");
+    const seedFailure = failures.find((item) => item.id === "seed-delivery");
     assert.equal(failure?.id, "delivery");
     assert.equal(failure?.event, "push");
     assert.equal(failure?.attempts, 5);
     assert.equal(failure?.last_error, "unexpected_error");
+    assert.equal(failure?.last_step, null);
     assert.equal(JSON.stringify(failure).includes("secret token"), false);
+    assert.equal(seedFailure?.last_error, "unexpected_error");
+    assert.equal(seedFailure?.last_step, "create_milestone");
+    assert.equal(
+      JSON.stringify(seedFailure).includes("private GitHub response"),
+      false,
+    );
     store.retryFailed();
     assert.equal(store.hasFailed("delivery"), false);
     assert.deepEqual(store.nextDelivery(10_000), {
@@ -179,6 +199,7 @@ test("opening a legacy SQLite database adds delivery columns and preserves pendi
       );
       assert.ok(columns.has("created_at"));
       assert.ok(columns.has("last_error"));
+      assert.ok(columns.has("last_step"));
       const runColumns = new Set(
         store.db
           .prepare("PRAGMA table_info(runs)")

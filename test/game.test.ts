@@ -22,6 +22,7 @@ class Fake extends GitHub {
   milestones: any[] = [];
   comments: any[] = [];
   commits = 0;
+  failMilestones = false;
   failRevision = false;
   reviews: any[] = [];
   checkRunItems: any[] = [];
@@ -54,7 +55,10 @@ class Fake extends GitHub {
     if (path.includes("/reviews")) return this.reviews;
     if (path.includes("/comments"))
       return this.comments.filter((c) => c.path === path);
-    if (path.includes("/milestones")) return this.milestones;
+    if (path.includes("/milestones")) {
+      if (this.failMilestones) throw new Error("private provider response");
+      return this.milestones;
+    }
     if (path.includes("/issues")) return this.issues;
     if (path.includes("/pulls")) return this.prs;
     throw new Error(path);
@@ -167,7 +171,10 @@ class Fake extends GitHub {
     this.refs[r.base ?? "main"] = sha;
   }
 }
-async function setup(selection: Run["scenario"] = selectScenario(pack)) {
+async function setup(
+  selection: Run["scenario"] = selectScenario(pack),
+  seed = true,
+) {
   const s = new Store(":memory:"),
     fake = new Fake(),
     game = new Game(s, async () => fake as unknown as GitHub);
@@ -189,7 +196,7 @@ async function setup(selection: Run["scenario"] = selectScenario(pack)) {
     };
   }
   s.save(r);
-  await game.seed(r);
+  if (seed) await game.seed(r);
   return { s, fake, game, r };
 }
 function payload(r: Run, body?: string, user = 3) {
@@ -214,6 +221,19 @@ test("seeding resumes with exact object counts and no duplicate creation", async
     assert.match(fake.issues[0].body, /Contributions/);
     assert.equal(fake.prs.length, 10);
     assert.equal(s.get("run").phase, "active");
+  } finally {
+    s.close();
+  }
+});
+test("seed errors carry a safe step without replacing the original error", async () => {
+  const { s, fake, game, r } = await setup(selectScenario(inboxPack), false);
+  try {
+    fake.failMilestones = true;
+    await assert.rejects(game.seed(r), (error: any) => {
+      assert.equal(error.step, "create_milestone");
+      assert.equal(error.message, "private provider response");
+      return true;
+    });
   } finally {
     s.close();
   }

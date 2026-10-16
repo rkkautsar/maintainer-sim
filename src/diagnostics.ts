@@ -1,4 +1,5 @@
 import { asRecord } from "./validation.ts";
+import { seedStepFrom, type SeedStep } from "./game/seed-steps.ts";
 
 export type FailureCode =
   | "rate_limited"
@@ -31,6 +32,7 @@ export type Diagnostic = {
   run?: string;
   delivery?: string;
   requests?: number;
+  step?: SeedStep;
 };
 export type Reporter = (diagnostic: Diagnostic) => void;
 // Only allowlisted fields are serialized. Never accept raw errors or payloads.
@@ -41,8 +43,17 @@ export const report: Reporter = ({
   run,
   delivery,
   requests,
+  step,
 }) => {
   console.info(
-    JSON.stringify({ component, event, reason, run, delivery, requests }),
+    JSON.stringify({
+      component,
+      event,
+      reason,
+      run,
+      delivery,
+      requests,
+      step: seedStepFrom({ step }),
+    }),
   );
 };

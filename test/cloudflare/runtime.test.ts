@@ -10,6 +10,7 @@ import {
 } from "node:crypto";
 import { Miniflare } from "miniflare";
 import { publicRequest } from "../../src/package-registry.ts";
+import { report } from "../../src/diagnostics.ts";
 const token = "a".repeat(64);
 const appKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const appPem = appKey.privateKey
@@ -566,6 +567,49 @@ test("public source rejection diagnostics expose only a safe reason", async () =
   );
   assert.equal(messages.join(" ").includes("secret-token"), false);
   assert.equal(messages.join(" ").includes("private response body"), false);
+});
+
+test("seed diagnostic logs include only an allowlisted step", () => {
+  const messages: string[] = [];
+  const original = console.info;
+  console.info = (message?: unknown) => messages.push(String(message));
+  try {
+    report({
+      component: "game",
+      event: "delivery_failed",
+      reason: "unexpected_error",
+      delivery: "seed:run-id",
+      step: "create_milestone",
+    });
+    report({
+      component: "game",
+      event: "delivery_failed",
+      reason: "unexpected_error",
+      delivery: "seed:run-id",
+      step: "private provider response" as any,
+    });
+  } finally {
+    console.info = original;
+  }
+  assert.deepEqual(
+    messages.map((message) => JSON.parse(message)),
+    [
+      {
+        component: "game",
+        event: "delivery_failed",
+        reason: "unexpected_error",
+        delivery: "seed:run-id",
+        step: "create_milestone",
+      },
+      {
+        component: "game",
+        event: "delivery_failed",
+        reason: "unexpected_error",
+        delivery: "seed:run-id",
+      },
+    ],
+  );
+  assert.equal(messages.join(" ").includes("private provider response"), false);
 });
 
 test("private source repositories fall back to App-authenticated asset downloads", async () => {

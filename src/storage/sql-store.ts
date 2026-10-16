@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { failureCode } from "../diagnostics.ts";
+import { seedStepFrom } from "../game/seed-steps.ts";
 import type { Persistence, RevisionIntent } from "../persistence.ts";
 import type { Run } from "../types.ts";
 import { parse } from "../validation.ts";
@@ -60,6 +61,8 @@ export function initializeStore(db: SqlDatabase): void {
     );
   if (!columns.has("last_error"))
     run("ALTER TABLE deliveries ADD COLUMN last_error TEXT");
+  if (!columns.has("last_step"))
+    run("ALTER TABLE deliveries ADD COLUMN last_step TEXT");
   if (!columns.has("completed_at"))
     run("ALTER TABLE deliveries ADD COLUMN completed_at INTEGER");
   run("UPDATE deliveries SET created_at=? WHERE created_at=0", Date.now());
@@ -137,13 +140,14 @@ export abstract class SqlStore implements Persistence {
     const attempts = row.attempts + 1;
     this.db
       .prepare(
-        "UPDATE deliveries SET attempts=?,next=?,status=?,last_error=? WHERE id=?",
+        "UPDATE deliveries SET attempts=?,next=?,status=?,last_error=?,last_step=? WHERE id=?",
       )
       .run(
         attempts,
         now + Math.min(60000, 1000 * 2 ** attempts),
         attempts >= 5 ? "failed" : "pending",
         failureCode(error),
+        seedStepFrom(error) ?? null,
         row.id,
       );
   }
@@ -175,7 +179,7 @@ export abstract class SqlStore implements Persistence {
   failures() {
     return this.db
       .prepare(
-        "SELECT id,event,attempts,last_error FROM deliveries WHERE status='failed'",
+        "SELECT id,event,attempts,last_error,last_step FROM deliveries WHERE status='failed'",
       )
       .all();
   }

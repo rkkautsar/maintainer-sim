@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { failureCode, report } from "../diagnostics.ts";
+import { seedStepFrom } from "../game/seed-steps.ts";
 import { initialRun } from "../engine.ts";
 import { Game } from "../game.ts";
 import { GitHub } from "../github.ts";
@@ -458,6 +459,7 @@ export class GameSession extends DurableObject<Env> {
             event: "delivery_failed",
             reason: failureCode(error),
             delivery: row.id,
+            step: seedStepFrom(error),
           });
         }
       } else {
