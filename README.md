@@ -54,7 +54,7 @@ GitHub Actions runs formatting, ESLint, TypeScript, service/scenario tests, and 
 
 The [code quality review](docs/CODE_REVIEW.md) describes the integrated module boundaries, typed data validation, storage policy, and deliberate tradeoffs.
 
-The App needs Contents, Issues, and Pull requests write access; Checks and Actions read access for milestone stages; and Metadata read access. The launcher also needs repository-creation permission through user authorization. Subscribe to the `check_run` webhook event for milestone-driven stages. Installation and repository-access events handle access changes; installing the App alone does not create a game.
+The App needs Contents, Issues, and Pull requests write access and Metadata read access. Grant Workflows write access when a scenario seeds files under `.github/workflows`; GitHub requires this separately from Actions access. Milestone stages also need Checks and Actions read access and the `check_run` webhook event. The launcher also needs repository-creation permission through user authorization. Installation and repository-access events handle access changes; installing the App alone does not create a game.
 
 Webhook payloads require a valid signature. Commands and review credit are restricted to the designated player. Tokens stay on the server, and player repository code is never executed in the game service. GitHub, webhook, AI, and persisted-run data are parsed through Zod boundaries before use. Run records use a `schemaVersion: 1` envelope; existing bare run records are migrated on read. OAuth uses expiring one-use state, PKCE, a secure session cookie, and CSRF protection. New games are limited to five per authenticated account per UTC day. Repository creation and seeding are durable and retryable.
 

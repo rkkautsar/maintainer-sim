@@ -19,7 +19,7 @@ Configure:
 - Setup URL: `https://pr-flood.lol/setup`
 - Leave automatic OAuth-during-installation disabled: the launcher initiates its own state/PKCE flow.
 - Permit installation on any account if inviting other players.
-- Keep Contents, Issues and Pull requests write access and Metadata read. Milestone-driven stages also need Checks read, Actions read, and the `check_run` webhook subscription.
+- Keep Contents, Issues and Pull requests write access and Metadata read. Grant Workflows write access when a scenario seeds files under `.github/workflows` (including Forum Inbox); Actions read access does not grant permission to write workflow files. Milestone-driven stages also need Checks read, Actions read, and the `check_run` webhook subscription.
 - Grant the App installation Contents read access to `SCENARIO_REPOSITORIES` so it can discover private scenario releases and download package assets.
 - Add **Repository creation: write** if available. GitHub's create-repository API also accepts **Administration: write**, but prefer the narrower creation permission. If GitHub offers only Administration, review that broader permission before changing the registration.
 - Existing installations must approve newly requested permissions.

@@ -3,6 +3,7 @@ import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import * as schemas from "./github-schemas.ts";
 import { parse } from "./validation.ts";
+const MAX_GITHUB_BLOB_BYTES = 250_000;
 export class GitHub {
   api: Octokit;
   requestCount = 0;
@@ -153,7 +154,7 @@ export class GitHub {
         schemas.blobSchema,
         await this.get(root + "/git/blobs/" + entry.sha),
       );
-      if (blob.size > 100000) throw new Error("Oversized file");
+      if (blob.size > MAX_GITHUB_BLOB_BYTES) throw new Error("Oversized file");
       files[entry.path] = Buffer.from(blob.content, "base64").toString("utf8");
     }
     return files;
@@ -180,7 +181,7 @@ export class GitHub {
         schemas.blobSchema,
         await this.get(root + "/git/blobs/" + entry.sha),
       );
-      if (blob.size > 100000) throw new Error("Oversized file");
+      if (blob.size > MAX_GITHUB_BLOB_BYTES) throw new Error("Oversized file");
       files[path] = Buffer.from(blob.content, "base64").toString("utf8");
     }
     return files;

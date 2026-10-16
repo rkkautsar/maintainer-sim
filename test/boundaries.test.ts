@@ -113,6 +113,48 @@ test("review and comment list wrappers reject malformed nested API data", async 
   );
 });
 
+test("repository tree reads accept normal lockfiles and still reject oversized blobs", async () => {
+  const lockfile = "x".repeat(107325);
+  const responses = {
+    "/repos/acme/example/git/trees/abc?recursive=1": {
+      truncated: false,
+      tree: [
+        {
+          path: "package-lock.json",
+          mode: "100644",
+          type: "blob",
+          sha: "lock",
+        },
+      ],
+    },
+    "/repos/acme/example/git/blobs/lock": {
+      size: Buffer.byteLength(lockfile),
+      content: Buffer.from(lockfile).toString("base64"),
+    },
+  };
+  const client = new MockGitHub(responses);
+
+  assert.deepEqual(await client.tree("/repos/acme/example", "abc"), {
+    "package-lock.json": lockfile,
+  });
+  assert.deepEqual(
+    await client.treeFiles("/repos/acme/example", "abc", ["package-lock.json"]),
+    { "package-lock.json": lockfile },
+  );
+
+  const oversized = new MockGitHub({
+    "/repos/acme/example/git/trees/abc?recursive=1": {
+      truncated: false,
+      tree: [{ path: "large", mode: "100644", type: "blob", sha: "large" }],
+    },
+    "/repos/acme/example/git/blobs/large": { size: 250001, content: "" },
+  });
+  await assert.rejects(
+    oversized.treeFiles("/repos/acme/example", "abc", ["large"]),
+    /Oversized file/,
+  );
+});
+
 test("malformed API errors do not expose response bodies or credential fields", async () => {
   const responseBody = "private-response-body-should-not-appear";
   const credential = "ghp_fakecredentialthatmustnotappear";
