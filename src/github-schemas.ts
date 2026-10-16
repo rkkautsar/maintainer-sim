@@ -44,9 +44,14 @@ export const pullSchema = numberedSchema.extend({
   base: z.object({ ref: z.string() }),
 });
 export type GitHubPull = z.infer<typeof pullSchema>;
+export const pullListSchema = numberedSchema.extend({
+  state: z.enum(["open", "closed"]),
+  merged_at: z.string().nullable().optional(),
+});
 export const commentSchema = z.object({
   id: positiveId,
   body: z.string().nullable().optional(),
+  created_at: z.string().optional(),
   user: z
     .object({ id: positiveId.optional(), type: z.string().optional() })
     .nullable()
@@ -60,6 +65,46 @@ export const reviewSchema = z.object({
   state: z.string(),
   commit_id: z.string(),
   submitted_at: z.string().nullable().optional(),
+});
+export const milestoneItemSchema = z.object({
+  number: positiveId,
+  title: z.string(),
+  body: z.string().nullable().optional(),
+  state: z.enum(["open", "closed"]),
+  user: z
+    .object({ id: positiveId.optional(), type: z.string().optional() })
+    .nullable()
+    .optional(),
+  pull_request: z.object({ url: z.string() }).optional(),
+});
+export const pullFileSchema = z.object({
+  filename: z.string(),
+  status: z.string(),
+  patch: z.string().optional(),
+});
+export const checkRunsSchema = z.object({
+  check_runs: z.array(
+    z.object({
+      name: z.string(),
+      head_sha: z.string(),
+      status: z.string(),
+      conclusion: z.string().nullable().optional(),
+      app: z.object({ slug: z.string().optional() }).nullable().optional(),
+      check_suite: z.object({ id: positiveId }).optional(),
+    }),
+  ),
+});
+export const workflowRunsSchema = z.object({
+  workflow_runs: z.array(
+    z.object({
+      path: z.string(),
+      head_sha: z.string(),
+      status: z.string(),
+      conclusion: z.string().nullable().optional(),
+      check_suite_id: positiveId,
+      created_at: z.string().optional(),
+    }),
+  ),
 });
 export const treeSchema = z.object({
   truncated: z.boolean().optional(),

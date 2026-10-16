@@ -97,13 +97,23 @@ export default {
             title: p.title,
             description: p.description,
             stages: p.stages.length,
+            mode: p.stages[0].mode ?? "review",
             prs: p.stages.reduce((n, s) => n + s.proposals.length, 0),
             preview: {
               title: p.stages[0].title,
-              items: p.stages[0].issues.slice(0, 3).map((issue) => ({
-                title: issue.title,
-                detail: "Roadmap issue",
-              })),
+              items:
+                p.stages[0].mode === "milestone"
+                  ? [
+                      {
+                        title: "Plan the issues yourself",
+                        detail:
+                          "Run Louibot locally against your GitHub issues",
+                      },
+                    ]
+                  : p.stages[0].issues.slice(0, 3).map((issue) => ({
+                      title: issue.title,
+                      detail: "Roadmap issue",
+                    })),
             },
           })),
           { headers: { "cache-control": "no-store" } },

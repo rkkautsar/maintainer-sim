@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { catalog, findPackage, packageScope } from "../src/packages.ts";
-import { packages } from "./fixtures/packages.ts";
+import { milestonePackage, packages } from "./fixtures/packages.ts";
 import {
   GitHubPackageRegistry,
   publicRequest,
+  validatePackage,
 } from "../src/package-registry.ts";
 
 test("public package requests survive an unavailable edge cache", async () => {
@@ -51,6 +53,28 @@ test("package lookups stay isolated across concurrent async scopes", async () =>
   );
   assert.deepEqual(packageScope.run([], catalog), []);
   assert.throws(() => packageScope.run([], () => findPackage("forum")));
+});
+
+test("milestone packages require a seeded protected workflow and empty prepared work", () => {
+  const { digest: _fixtureDigest, ...content } = milestonePackage;
+  const pack = {
+    ...content,
+    digest: createHash("sha256").update(JSON.stringify(content)).digest("hex"),
+  };
+  assert.equal(validatePackage(pack).stages[0].mode, "milestone");
+  assert.throws(
+    () =>
+      validatePackage({
+        ...pack,
+        stages: [
+          {
+            ...pack.stages[0],
+            workflowPath: ".github/workflows/untrusted.yml",
+          },
+        ],
+      }),
+    /Invalid milestone stage configuration/,
+  );
 });
 
 test("a cold registry resolves a persisted pinned package without source credentials", async () => {

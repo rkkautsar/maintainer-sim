@@ -182,3 +182,74 @@ test("coaching cannot substitute a fabricated choice or mismatched probabilities
   f.env.REVIEW_COACHING_ENABLED = "true";
   assert.equal(await f.judge.coach("Missing owner check", {}), undefined);
 });
+
+test("milestone judge returns independent model-agnostic score dimensions", async () => {
+  const levels = {
+    poor: "poor",
+    mixed: "mixed",
+    good: "good",
+    excellent: "excellent",
+  };
+  const f = fixture({
+    answers: {
+      issueBreakdown: choice(levels, "poor", 0.99),
+      issueClarity: choice(levels, "good", 0.99),
+      pullRequestQuality: choice(levels, "excellent", 0.99),
+      reviewQuality: choice(levels, "mixed", 0.99),
+    },
+    usage: { input_tokens: 900 },
+  });
+  assert.deepEqual(
+    await f.judge.gradeMilestone({
+      objective: "Build a private inbox",
+      testStatus: "passed",
+      clarificationRounds: 0,
+      issues: [],
+      pullRequests: [],
+    }),
+    {
+      issueBreakdown: 0,
+      issueClarity: 75,
+      pullRequestQuality: 100,
+      reviewQuality: 40,
+    },
+  );
+  assert.deepEqual(
+    f.calls.map((call) => call.action),
+    ["claim", "complete"],
+  );
+  assert.equal(f.calls[1].inputTokens, 900);
+});
+
+test("uncertain milestone dimensions remain unassessed independently", async () => {
+  const levels = {
+    poor: "poor",
+    mixed: "mixed",
+    good: "good",
+    excellent: "excellent",
+  };
+  const f = fixture({
+    answers: {
+      issueBreakdown: choice(levels, "good", 0.99),
+      issueClarity: choice(levels, "mixed", 0.99),
+      pullRequestQuality: choice(levels, "excellent", 0.99),
+      reviewQuality: choice(levels, "poor", 0.4),
+    },
+    usage: { input_tokens: 700 },
+  });
+  assert.deepEqual(
+    await f.judge.gradeMilestone({
+      objective: "Build a private inbox",
+      testStatus: "passed",
+      clarificationRounds: 0,
+      issues: [],
+      pullRequests: [],
+    }),
+    {
+      issueBreakdown: 75,
+      issueClarity: 40,
+      pullRequestQuality: 100,
+      reviewQuality: null,
+    },
+  );
+});

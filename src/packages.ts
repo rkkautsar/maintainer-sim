@@ -1,11 +1,27 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Proposal, Run, Variant } from "./types.ts";
 export type Character = { name: string; role: string; avatar: string };
+export type StageMode = "review" | "milestone";
 export type Stage = {
   id: string;
   title: string;
   intro: string;
   baseline: Record<string, string>;
+  /** Missing on historical releases; those stages use the original PR game. */
+  mode?: StageMode;
+  /** A trusted GitHub Actions check that proves the stage's behavioral tests. */
+  requiredCheck?: string;
+  /** Exact seeded workflow path used to bind the check to the trusted suite. */
+  workflowPath?: string;
+  /** Test and workflow files that must remain identical to the seeded baseline. */
+  protectedFiles?: string[];
+  /** Scenario-specific rubric for the four non-outcome scorecard dimensions. */
+  evaluation?: {
+    issueBreakdown: string;
+    issueClarity: string;
+    pullRequestQuality: string;
+    reviewQuality: string;
+  };
   issues: { id: string; title: string; body: string }[];
   proposals: Proposal[];
   endings: { success: string; incomplete: string; partial: string };

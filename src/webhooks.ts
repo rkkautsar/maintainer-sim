@@ -10,6 +10,7 @@ export const webhookEvents = new Set([
   "issue_comment",
   "issues",
   "push",
+  "check_run",
 ]);
 const repository = z.object({ id: positiveId });
 export const webhookSchema = z.object({
@@ -19,7 +20,10 @@ export const webhookSchema = z.object({
   issue: z.object({ number: positiveId }).optional(),
   pull_request: z.object({ number: positiveId }).optional(),
   comment: z
-    .object({ body: z.string(), user: z.object({ id: positiveId }) })
+    .object({
+      body: z.string(),
+      user: z.object({ id: positiveId, type: z.string().optional() }),
+    })
     .optional(),
   repositories_removed: z.array(repository).optional(),
   repositories_added: z.array(repository).optional(),

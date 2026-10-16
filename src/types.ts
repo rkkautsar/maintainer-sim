@@ -79,6 +79,15 @@ export type Assessment = {
     explanation: string;
   }[];
   reasoning: string;
+  scorecard?: {
+    milestone: number | null;
+    issueBreakdown: number | null;
+    issueClarity: number | null;
+    pullRequestQuality: number | null;
+    reviewQuality: number | null;
+    clarificationRounds: number;
+    testStatus: "passed" | "failed" | "pending" | "missing";
+  };
 };
 export type Variant = {
   files: Record<string, string>;

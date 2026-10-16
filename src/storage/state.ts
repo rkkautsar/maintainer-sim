@@ -28,6 +28,17 @@ const assessment = z.object({
     }),
   ),
   reasoning: z.string(),
+  scorecard: z
+    .object({
+      milestone: z.number().nullable(),
+      issueBreakdown: z.number().nullable(),
+      issueClarity: z.number().nullable(),
+      pullRequestQuality: z.number().nullable(),
+      reviewQuality: z.number().nullable(),
+      clarificationRounds: z.number().int().nonnegative(),
+      testStatus: z.enum(["passed", "failed", "pending", "missing"]),
+    })
+    .optional(),
 });
 export const runSchema: z.ZodType<Run> = z.object({
   id: z.string(),

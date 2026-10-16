@@ -179,7 +179,9 @@ export function debrief(
   run: Run,
   feedbackLinks: Record<string, string> = {},
 ): string {
-  const { proposals, issues } = scenarioFor(run);
+  const stage = scenarioFor(run);
+  if (stage.mode === "milestone") return milestoneDebrief(run);
+  const { proposals, issues } = stage;
   const r = run.result ?? assess(run);
   const link = (id: string) =>
     feedbackLinks[id] ??
@@ -248,6 +250,58 @@ export function debrief(
       "⚪ Unscored decisions are excluded from available points; this is a partial assessment.",
     );
   for (const warning of r.warnings ?? [])
+    lines.push("", `**Assessment note:** ${warning}`);
+  return lines.join("\n");
+}
+
+function milestoneDebrief(run: Run): string {
+  const result = run.result ?? {
+    complete: [],
+    total: 1,
+    points: 0,
+    maximum: 0,
+    success: null,
+    harmful: [],
+    debt: [],
+    decisions: [],
+    reasoning: "Not assessed.",
+  };
+  const score = result.scorecard;
+  const weight = (value: number | null | undefined, max: number) =>
+    value === null || value === undefined
+      ? "Not assessed"
+      : `${Math.round((value / 100) * max)}/${max} (${value}/100)`;
+  const testLabel =
+    score?.testStatus === "passed"
+      ? "Passed"
+      : score?.testStatus === "failed"
+        ? "Failed"
+        : score?.testStatus === "pending"
+          ? "Still running"
+          : "No result found";
+  const lines = [
+    "## 🏁 Stage debrief",
+    "",
+    storyEnding(result, run),
+    "",
+    `**Milestone tests:** ${testLabel}`,
+    `**Score:** ${result.points}/${result.maximum} assessed points`,
+    "",
+    "| Dimension | Score |",
+    "| :-- | --: |",
+    `| Milestone completion | ${weight(score?.milestone, 50)} |`,
+    `| Issue breakdown | ${weight(score?.issueBreakdown, 15)} |`,
+    `| Issue clarity | ${weight(score?.issueClarity, 15)} |`,
+    `| Pull request quality | ${weight(score?.pullRequestQuality, 10)} |`,
+    `| Review quality | ${weight(score?.reviewQuality, 10)} |`,
+    "",
+    `**Louibot clarification rounds without a merged linked PR:** ${score?.clarificationRounds ?? 0}`,
+    "",
+    "Passing the required E2E check earns full milestone credit. The quality dimensions are scored separately, so a broad single issue can deliver the milestone while receiving a low breakdown score.",
+    "",
+    result.reasoning,
+  ];
+  for (const warning of result.warnings ?? [])
     lines.push("", `**Assessment note:** ${warning}`);
   return lines.join("\n");
 }

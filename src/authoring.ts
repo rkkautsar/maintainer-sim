@@ -42,6 +42,19 @@ const scenarioSchema = z
 const stageSchema = z
   .object({
     title: z.string(),
+    mode: z.enum(["review", "milestone"]).optional(),
+    requiredCheck: z.string().optional(),
+    workflowPath: z.string().optional(),
+    protectedFiles: z.array(z.string()).optional(),
+    evaluation: z
+      .object({
+        issueBreakdown: z.string(),
+        issueClarity: z.string(),
+        pullRequestQuality: z.string(),
+        reviewQuality: z.string(),
+      })
+      .strict()
+      .optional(),
     endings: z
       .object({
         success: z.string(),
@@ -274,7 +287,19 @@ export function publishScenario(repoInput: string): ScenarioPackage {
     const dir = join(root, "stages", stageId),
       doc = markdown(readFileSync(join(dir, "stage.md"), "utf8")),
       stageMeta = annotation(stageSchema, doc.meta);
-    allowedKeys(stageMeta, ["title", "endings"], "stage");
+    allowedKeys(
+      stageMeta,
+      [
+        "title",
+        "endings",
+        "mode",
+        "requiredCheck",
+        "workflowPath",
+        "protectedFiles",
+        "evaluation",
+      ],
+      "stage",
+    );
     text(stageMeta.title, "stage title", 150);
     text(doc.body, "stage brief");
     allowedKeys(
@@ -301,12 +326,22 @@ export function publishScenario(repoInput: string): ScenarioPackage {
       text(body, "issue body");
       return { id: issueMeta.id, title: issueMeta.title, body };
     });
-    need(
-      issues.length > 0 &&
-        issues.length <= 12 &&
-        new Set(issues.map((i) => i.id)).size === issues.length,
-      "Invalid/duplicate issues",
-    );
+    const mode = stageMeta.mode ?? "review";
+    if (mode === "review")
+      need(
+        issues.length > 0 &&
+          issues.length <= 12 &&
+          new Set(issues.map((i) => i.id)).size === issues.length,
+        "Invalid/duplicate issues",
+      );
+    if (mode === "review")
+      need(
+        !stageMeta.requiredCheck &&
+          !stageMeta.workflowPath &&
+          !stageMeta.protectedFiles &&
+          !stageMeta.evaluation,
+        "Review stages cannot define milestone-only fields",
+      );
     const proposals: Proposal[] = docs(join(dir, "prs")).map((file) => {
       const { meta, body } = markdown(
         readFileSync(join(dir, "prs", file), "utf8"),
@@ -409,17 +444,59 @@ export function publishScenario(repoInput: string): ScenarioPackage {
         variants,
       };
     });
-    need(
-      proposals.length > 0 &&
-        proposals.length <= 15 &&
-        new Set(proposals.map((p) => p.id)).size === proposals.length,
-      "Invalid/duplicate PRs",
-    );
-    for (const issue of issues)
+    if (mode === "review") {
       need(
-        proposals.some((p) => p.issue === issue.id),
-        "Issue has no contribution: " + issue.id,
+        proposals.length > 0 &&
+          proposals.length <= 15 &&
+          new Set(proposals.map((p) => p.id)).size === proposals.length,
+        "Invalid/duplicate PRs",
       );
+      for (const issue of issues)
+        need(
+          proposals.some((p) => p.issue === issue.id),
+          "Issue has no contribution: " + issue.id,
+        );
+    } else {
+      need(
+        issues.length === 0 && proposals.length === 0,
+        "Milestone stages cannot pre-author issues or PRs",
+      );
+      need(
+        typeof stageMeta.requiredCheck === "string" &&
+          /^[A-Za-z0-9][A-Za-z0-9_. /-]{0,99}$/.test(stageMeta.requiredCheck),
+        "Milestone stages need a valid requiredCheck",
+      );
+      need(
+        Array.isArray(stageMeta.protectedFiles) &&
+          stageMeta.protectedFiles.length > 0 &&
+          stageMeta.protectedFiles.length <= 20 &&
+          new Set(stageMeta.protectedFiles).size ===
+            stageMeta.protectedFiles.length,
+        "Milestone stages need unique protected test and workflow files",
+      );
+      for (const path of stageMeta.protectedFiles) {
+        need(
+          typeof path === "string" &&
+            path.length < 240 &&
+            !path.startsWith("/") &&
+            !path
+              .split("/")
+              .some((part) => !part || part === "." || part === "..") &&
+            path in baseline,
+          "Protected milestone files must be safe paths in the stage baseline",
+        );
+      }
+      need(
+        typeof stageMeta.workflowPath === "string" &&
+          stageMeta.workflowPath.startsWith(".github/workflows/") &&
+          stageMeta.workflowPath in baseline &&
+          stageMeta.protectedFiles.includes(stageMeta.workflowPath),
+        "Milestone workflowPath must be a protected workflow in the stage baseline",
+      );
+      need(stageMeta.evaluation, "Milestone stages need an evaluation rubric");
+      for (const value of Object.values(stageMeta.evaluation))
+        text(value, "milestone evaluation rubric", 4000);
+    }
     // Prevent accidental overlap between independent contributions; alternatives may share files.
     for (let a = 0; a < proposals.length; a++)
       for (let b = a + 1; b < proposals.length; b++) {
@@ -464,6 +541,15 @@ export function publishScenario(repoInput: string): ScenarioPackage {
       title: stageMeta.title,
       intro: doc.body,
       baseline,
+      ...(mode === "milestone"
+        ? {
+            mode,
+            requiredCheck: stageMeta.requiredCheck,
+            workflowPath: stageMeta.workflowPath,
+            protectedFiles: stageMeta.protectedFiles,
+            evaluation: stageMeta.evaluation,
+          }
+        : {}),
       issues,
       proposals,
       endings: stageMeta.endings,

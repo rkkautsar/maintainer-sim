@@ -5,6 +5,7 @@ import { advanceStage } from "./game/progression.ts";
 import { seedRun } from "./game/provisioning.ts";
 import { publishResult } from "./game/publishing.ts";
 import { reconcileRun } from "./game/reconciliation.ts";
+import { assessMilestone, milestoneTestStatus } from "./game/milestone.ts";
 import { assessReviews } from "./game/reviews.ts";
 import { recoverRevision, revisePull } from "./game/revisions.ts";
 import { GitHub } from "./github.ts";
@@ -49,7 +50,10 @@ export class Game {
   }
   async finish(r: Run, gh: GitHub) {
     r.phase = "finishing";
-    r.result = assess(r);
+    r.result =
+      scenarioFor(r).mode === "milestone"
+        ? await assessMilestone(r, gh, this.reviewer, this.judgeEnabled)
+        : assess(r);
     this.store.save(r);
     await this.publish(r, gh);
   }
@@ -109,16 +113,42 @@ export class Game {
         ["finished", "inaccessible", "seeding"].includes(r.phase)
       )
         continue;
+      const milestoneMode = scenarioFor(r).mode === "milestone";
       if (
         event === "issue_comment" &&
-        (payload.issue?.number !== r.master ||
-          payload.comment?.user.id !== r.player ||
-          !command(payload.comment?.body ?? ""))
+        (milestoneMode
+          ? payload.comment?.user.id !== r.player &&
+            payload.comment?.user.type !== "Bot"
+          : payload.issue?.number !== r.master ||
+            payload.comment?.user.id !== r.player ||
+            !command(payload.comment?.body ?? ""))
       )
         continue;
       const gh = await this.connect(r);
       if (r.phase === "finishing") {
         await this.publish(r, gh);
+        continue;
+      }
+      if (milestoneMode) {
+        const cmd =
+          event === "issue_comment" &&
+          payload.action === "created" &&
+          payload.issue?.number === r.master &&
+          payload.comment?.user.id === r.player
+            ? command(payload.comment.body)
+            : undefined;
+        if (
+          cmd?.kind === "finish" ||
+          (await milestoneTestStatus(r, gh)) === "passed"
+        ) {
+          await this.finish(r, gh);
+        }
+        report({
+          component: "game",
+          event: "milestone_reconciled",
+          run: r.id,
+          requests: gh.requestCount,
+        });
         continue;
       }
       const { proposals } = scenarioFor(r);

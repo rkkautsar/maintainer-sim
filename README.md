@@ -1,6 +1,6 @@
 # PR Flood
 
-Practice maintaining a real open-source project through GitHub reviews. Follow the story in Game Master issue #1, inspect competing contributions, request prepared revisions, and decide what to merge or close. Each stage has a milestone, linked issues, unsolicited PRs, and a debrief about delivery, defects, and maintenance costs.
+Practice maintaining a real open-source project through GitHub. Review-game stages provide competing contributions to triage; milestone-driven stages ask you to plan issues, run Louibot locally, and deliver a tested milestone. Both modes end with a scorecard and debrief.
 
 [Play](https://pr-flood.lol/) · [GitHub App](https://github.com/apps/pr-flood) · [App settings](https://github.com/settings/apps/pr-flood) · [Install App](https://github.com/apps/pr-flood/installations/new)
 
@@ -13,7 +13,7 @@ The first scenario is **Forum**: a runnable Express, React, and SQLite applicati
 3. Install the App or approve repository access when prompted, then retry setup.
 4. Follow Game Master issue #1 in the created repository. Clone the repository and run its app to investigate behavior while reviewing.
 
-A stage ends when all its PRs are merged or closed. Comment `/game finish` in issue #1 to end early, `/game revise <PR-number>` to request a prepared revision, or `/game next` after a stage finishes to advance. Each new stage starts from its authored baseline on a new branch and preserves earlier results.
+Review-game stages end when all their PRs are merged or closed. Milestone-driven stages end when the protected E2E check passes on the default branch. Comment `/game finish` in issue #1 to end early, `/game revise <PR-number>` to request a prepared revision, or `/game next` after a stage finishes to advance. Each new stage starts from its authored baseline on a new branch and preserves earlier results.
 
 Direct code edits remain possible on GitHub. Unsupported changes mark affected assessments unscored; they do not pause the game. Contributor portraits identify fictional characters. GitHub shows the App as the actual author.
 
@@ -54,7 +54,7 @@ GitHub Actions runs formatting, ESLint, TypeScript, service/scenario tests, and 
 
 The [code quality review](docs/CODE_REVIEW.md) describes the integrated module boundaries, typed data validation, storage policy, and deliberate tradeoffs.
 
-Contents, Issues, and Pull requests need write access; Metadata needs read access. The launcher also needs repository-creation permission through user authorization. Installation and repository-access events handle access changes; installing the App alone does not create a game.
+The App needs Contents, Issues, and Pull requests write access; Checks and Actions read access for milestone stages; and Metadata read access. The launcher also needs repository-creation permission through user authorization. Subscribe to the `check_run` webhook event for milestone-driven stages. Installation and repository-access events handle access changes; installing the App alone does not create a game.
 
 Webhook payloads require a valid signature. Commands and review credit are restricted to the designated player. Tokens stay on the server, and player repository code is never executed in the game service. GitHub, webhook, AI, and persisted-run data are parsed through Zod boundaries before use. Run records use a `schemaVersion: 1` envelope; existing bare run records are migrated on read. OAuth uses expiring one-use state, PKCE, a secure session cookie, and CSRF protection. New games are limited to five per authenticated account per UTC day. Repository creation and seeding are durable and retryable.
 

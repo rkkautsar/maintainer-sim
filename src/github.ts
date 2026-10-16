@@ -81,6 +81,11 @@ export class GitHub {
       parse(schemas.numberedSchema, x),
     );
   }
+  async listMilestoneItems(root: string, milestone: number) {
+    return (
+      await this.list(root + "/milestones/" + milestone + "/issues?state=all")
+    ).map((x) => parse(schemas.milestoneItemSchema, x));
+  }
   async listMilestones(root: string) {
     return (await this.list(root + "/milestones?state=all")).map((x) =>
       parse(schemas.numberedSchema, x),
@@ -91,6 +96,11 @@ export class GitHub {
       parse(schemas.numberedSchema, x),
     );
   }
+  async listPullDetails(root: string) {
+    return (await this.list(root + "/pulls?state=all")).map((x) =>
+      parse(schemas.pullListSchema, x),
+    );
+  }
   async listComments(path: string) {
     return (await this.list(path)).map((x) => parse(schemas.commentSchema, x));
   }
@@ -98,6 +108,23 @@ export class GitHub {
     return (await this.list(root + "/pulls/" + number + "/reviews")).map((x) =>
       parse(schemas.reviewSchema, x),
     );
+  }
+  async listPullFiles(root: string, number: number) {
+    return (await this.list(root + "/pulls/" + number + "/files")).map((x) =>
+      parse(schemas.pullFileSchema, x),
+    );
+  }
+  async checkRuns(root: string, sha: string) {
+    return parse(
+      schemas.checkRunsSchema,
+      await this.get(root + "/commits/" + sha + "/check-runs?per_page=100"),
+    ).check_runs;
+  }
+  async workflowRuns(root: string, sha: string) {
+    return parse(
+      schemas.workflowRunsSchema,
+      await this.get(root + "/actions/runs?head_sha=" + sha + "&per_page=100"),
+    ).workflow_runs;
   }
   async createNumbered(path: string, body: Record<string, unknown>) {
     return parse(schemas.numberedSchema, await this.post(path, body));
@@ -128,6 +155,33 @@ export class GitHub {
       );
       if (blob.size > 100000) throw new Error("Oversized file");
       files[entry.path] = Buffer.from(blob.content, "base64").toString("utf8");
+    }
+    return files;
+  }
+  async treeFiles(root: string, sha: string, paths: string[]) {
+    const data = parse(
+      schemas.treeSchema,
+      await this.get(root + "/git/trees/" + sha + "?recursive=1"),
+    );
+    if (data.truncated) throw new Error("Unsupported truncated tree");
+    const entries = new Map(
+      (data.tree ?? []).map((entry) => [entry.path, entry]),
+    );
+    const files: Record<string, string | undefined> = {};
+    for (const path of paths) {
+      const entry = entries.get(path);
+      if (!entry) {
+        files[path] = undefined;
+        continue;
+      }
+      if (entry.type !== "blob" || entry.mode !== "100644")
+        throw new Error("Unsupported file type");
+      const blob = parse(
+        schemas.blobSchema,
+        await this.get(root + "/git/blobs/" + entry.sha),
+      );
+      if (blob.size > 100000) throw new Error("Oversized file");
+      files[path] = Buffer.from(blob.content, "base64").toString("utf8");
     }
     return files;
   }

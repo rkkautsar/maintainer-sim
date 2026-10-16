@@ -11,8 +11,12 @@ export function publicLaunch(job: Job | undefined, slug = "pr-flood") {
       "Checking GitHub App access to your new repository.",
     ],
     seeding: [
-      "Contributors are arriving",
-      "Adding the release brief, issues, and pull requests. This can take a minute or two.",
+      job.mode === "milestone"
+        ? "Preparing your milestone"
+        : "Contributors are arriving",
+      job.mode === "milestone"
+        ? "Adding the release brief and trusted E2E workflow. You will create the issues and work them with Louibot locally."
+        : "Adding the release brief, issues, and pull requests. This can take a minute or two.",
     ],
     ready: [
       "Your project is ready",

@@ -146,6 +146,7 @@ export class LaunchSession extends DurableObject<Env> {
           owner: login.user.id,
           scenario: pack.id,
           version: pack.version,
+          mode: pack.stages[0].mode ?? "review",
           digest: pack.digest,
           marker: "PR Flood playthrough · " + id,
           name,

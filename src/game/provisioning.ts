@@ -40,7 +40,9 @@ export async function seedRun(store: Persistence, r: Run, gh: GitHub) {
       existing ??
       (await gh.createNumbered(root + "/milestones", {
         title,
-        description: issues.map((i) => i.title).join("; "),
+        description:
+          issues.map((i) => i.title).join("; ") ||
+          (scenarioFor(r).mode === "milestone" ? scenarioFor(r).intro : ""),
       }))
     ).number;
     store.save(r);

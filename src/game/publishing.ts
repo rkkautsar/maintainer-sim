@@ -44,14 +44,12 @@ export async function publishResult(store: Persistence, r: Run, gh: GitHub) {
     await gh.patch(root + "/issues/comments/" + existing.id, { body });
   // GitHub closing keywords only close issues on the default branch. Later
   // authored stages use their own branches, so reflect verified delivery here.
-  if (r.scenario) {
+  if (r.scenario && scenarioFor(r).mode !== "milestone") {
     for (const id of r.result!.complete)
       await gh.patch(root + "/issues/" + r.issues[id], { state: "closed" });
-    if (r.result!.success)
-      await gh.patch(root + "/milestones/" + r.milestone, {
-        state: "closed",
-      });
   }
+  if (r.result!.success)
+    await gh.patch(root + "/milestones/" + r.milestone, { state: "closed" });
   r.phase = "finished";
   store.save(r);
 }

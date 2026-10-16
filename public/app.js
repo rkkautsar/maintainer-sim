@@ -59,7 +59,9 @@ function renderTags(pack) {
   const tags = el("div", null, "tags");
   for (const text of [
     `${pack.stages} ${pack.stages === 1 ? "stage" : "stages"}`,
-    `${pack.prs} ${pack.prs === 1 ? "incoming PR" : "incoming PRs"}`,
+    pack.mode === "milestone"
+      ? "Milestone driven · use Louibot locally"
+      : `${pack.prs} ${pack.prs === 1 ? "incoming PR" : "incoming PRs"}`,
     "Played in GitHub",
   ]) {
     tags.append(el("span", text));

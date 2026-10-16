@@ -100,6 +100,22 @@ const packageSchema = z
             title: z.string(),
             intro: z.string(),
             baseline: files,
+            mode: z.enum(["review", "milestone"]).optional(),
+            requiredCheck: z.string().min(1).max(100).optional(),
+            workflowPath: z.string().min(1).max(240).optional(),
+            protectedFiles: z
+              .array(z.string().min(1).max(240))
+              .max(20)
+              .optional(),
+            evaluation: z
+              .object({
+                issueBreakdown: z.string().min(1).max(4000),
+                issueClarity: z.string().min(1).max(4000),
+                pullRequestQuality: z.string().min(1).max(4000),
+                reviewQuality: z.string().min(1).max(4000),
+              })
+              .strict()
+              .optional(),
             issues: z
               .array(
                 z.object({ id, title: z.string(), body: z.string() }).strict(),
@@ -143,6 +159,59 @@ export function validatePackage(value: unknown): ScenarioPackage {
   // field order. A JSON parse/stringify round trip preserves that order.
   parse(packageSchema, value);
   const pack = value as ScenarioPackage;
+  for (const stage of pack.stages) {
+    const mode = stage.mode ?? "review";
+    if (
+      mode === "milestone" &&
+      (!stage.requiredCheck ||
+        !/^[A-Za-z0-9][A-Za-z0-9_. /-]{0,99}$/.test(stage.requiredCheck))
+    )
+      throw new Error("Invalid milestone check name");
+    if (
+      mode === "milestone" &&
+      (!stage.requiredCheck ||
+        !stage.workflowPath ||
+        !stage.protectedFiles?.includes(stage.workflowPath) ||
+        !stage.protectedFiles?.length ||
+        !stage.evaluation ||
+        stage.issues.length ||
+        stage.proposals.length)
+    )
+      throw new Error("Invalid milestone stage configuration");
+    if (
+      mode === "review" &&
+      (stage.requiredCheck || stage.workflowPath || stage.evaluation)
+    )
+      throw new Error("Review stages cannot define a milestone check");
+    if (mode === "review" && stage.protectedFiles)
+      throw new Error("Review stages cannot define protected milestone files");
+    if (
+      stage.protectedFiles &&
+      (new Set(stage.protectedFiles).size !== stage.protectedFiles.length ||
+        stage.protectedFiles.some(
+          (path) =>
+            path.startsWith("/") ||
+            path
+              .split("/")
+              .some((part) => !part || part === "." || part === "..") ||
+            !(path in stage.baseline),
+        ))
+    )
+      throw new Error("Invalid protected milestone files");
+    if (
+      stage.evaluation &&
+      Object.values(stage.evaluation).some(
+        (value) => !value.trim() || value.length > 4000,
+      )
+    )
+      throw new Error("Invalid milestone evaluation rubric");
+    if (
+      stage.workflowPath &&
+      (!stage.workflowPath.startsWith(".github/workflows/") ||
+        !(stage.workflowPath in stage.baseline))
+    )
+      throw new Error("Invalid milestone workflow path");
+  }
   const { digest, ...content } = pack;
   const bytes = JSON.stringify(content);
   if (

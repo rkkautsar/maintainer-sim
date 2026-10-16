@@ -51,7 +51,7 @@ permissions:
   contents: read
 jobs:
   validate:
-    uses: rkkautsar/maintainer-sim/.github/workflows/scenario-release.yml@MAINTAINER_SIM_SHA
+    uses: rkkautsar/pr-flood.lol/.github/workflows/scenario-release.yml@MAINTAINER_SIM_SHA
     with:
       engine_ref: MAINTAINER_SIM_SHA
 ```
@@ -67,7 +67,7 @@ permissions:
   contents: write
 jobs:
   release:
-    uses: rkkautsar/maintainer-sim/.github/workflows/scenario-release.yml@MAINTAINER_SIM_SHA
+    uses: rkkautsar/pr-flood.lol/.github/workflows/scenario-release.yml@MAINTAINER_SIM_SHA
     with:
       engine_ref: MAINTAINER_SIM_SHA
 ```
@@ -175,6 +175,43 @@ The Markdown separator is a publishing boundary, not secrecy. Everything after i
 The v1 publisher supports regular UTF-8 files, at most 120 files / 1MB per snapshot, 250KB per file, a compact package up to 1.8MB, 15 PRs per stage, 12 issues, 8 stages, and three prepared revisions. These limits accommodate dependency lockfiles while keeping packages within Durable Object storage limits. It rejects committed credentials, runtime data, binaries, symlinks and submodules. Deletions are represented explicitly; renames are delete/add. Independent contributions may not edit the same files; declared alternatives may. This gives agents actionable validation failures instead of introducing an arbitrary dependency graph.
 
 A stage's next entry is the next item in `scenario.yaml`. After debrief the player can comment `/game next`. A new branch starts from the next authored snapshot, preserving previous history and frozen results. The same Game Master issue #1 is updated with the next brief. All pending prepared revisions and scoring stay deterministic. Jev remains an optional classifier of review text against the authored concern, with the same global budget.
+
+## Milestone-driven stages
+
+A milestone-driven stage leaves issue planning and implementation to the player. Set `mode: milestone` in `stage.md`; omit the `issues/` and `prs/` folders. Setup creates only the Game Master brief and GitHub milestone. The player creates the issues, adds them to that milestone, runs Louibot locally, and reviews the resulting PRs.
+
+The trusted E2E workflow and every file it needs must be in the seeded application baseline. Set `workflowPath` to that workflow file and list the workflow and its test dependencies under `protectedFiles`; the game verifies those files are unchanged. It binds the named check to a run of that exact workflow path and current default-branch commit, so another Actions workflow cannot spoof the result. The check name is the workflow name plus job name (for example, `Inbox E2E / browser`). The stage ends automatically when it passes; `/game finish` gives an early partial result. A failed or still-running check leaves the stage active so the player can continue.
+
+The trusted suite should test the public milestone behavior through the app's UI and API, with realistic users and data. Keep the outcomes explicit in the public brief; tests should verify those outcomes and edge cases. Include the workflow, test files, test configuration, fixtures, and any helper files in `protectedFiles`. Player-authored tests can supplement the suite, but the required check must execute the protected scenario suite directly.
+
+`stage.md` annotations for a milestone-driven stage:
+
+```markdown
+---
+title: The community wants a private activity inbox
+mode: milestone
+requiredCheck: Inbox E2E / browser
+workflowPath: .github/workflows/inbox-e2e.yml
+protectedFiles:
+  - .github/workflows/inbox-e2e.yml
+  - test/e2e/inbox.spec.ts
+  - test/e2e/helpers.ts
+  - playwright.config.ts
+evaluation:
+  issueBreakdown: "Reward independent, reviewable slices that collectively cover replies, votes, read state, privacy, ordering, and navigation. A single broad issue should earn low breakdown credit; issue count itself is not a gate."
+  issueClarity: "Reward concrete behavior, scope, and acceptance criteria that let Louibot proceed with few clarifications. Penalize repeated clarification loops when no linked PR is merged."
+  pullRequestQuality: "Judge correctness, scope, accessibility, maintainability, and evidence in the submitted implementation against the brief and E2E result. Passing the suite establishes the milestone outcome, not excellent code quality."
+  reviewQuality: "Reward reviews that explain real behavior, privacy, or regression risks and give actionable feedback. Give little credit for cosmetic-only nitpicks or generic praise."
+endings:
+  success: The private inbox is ready for the community.
+  incomplete: The required behavior still needs work.
+  partial: The milestone could not be fully assessed.
+---
+
+Members need one place to catch up on activity on their own threads. Build a private activity inbox for replies and votes on threads the signed-in member created. Exclude activity on other members' threads and activity authored by the signed-in member. Show the newest 20 matching events first, with a useful empty state. Opening an event takes the member to its thread. Unread events are distinguishable; opening one marks it read, and read state is private to that member.
+```
+
+There is no minimum issue count and no model-specific score adjustment. Clef scores issue breakdown, clarity, implementation quality, and review quality under the same rubric for every worker model. Passing the protected E2E check earns the full milestone-completion dimension, even when a single broad issue earns low breakdown credit. The clarity penalty applies to signed Louibot clarification comments followed by a player response on an issue with no merged linked PR; Louibot may use the player's GitHub identity.
 
 A useful agent checklist: make the starting app genuinely usable; create changes across the natural UI/API/test boundaries; demonstrate each deliberate defect with an executable witness or reproduction; keep tests plausible rather than revealing the answer; check the canonical sound path; read the rendered story and descriptions; validate and publish. Prefer a few credible characters with specific motivations over a generic greeting on every PR.
 

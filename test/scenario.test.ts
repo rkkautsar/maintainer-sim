@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { publishScenario, savePackage } from "../src/authoring.ts";
+import { validatePackage } from "../src/package-registry.ts";
 import { authoringRepository } from "./helpers/authoring.ts";
 
 test("publisher derives a package from real refs and preserves deletions", () => {
@@ -47,5 +48,68 @@ test("published package versions are immutable", () => {
   } finally {
     rmSync(repo, { recursive: true, force: true });
     rmSync(dest, { recursive: true, force: true });
+  }
+});
+
+test("publisher accepts a milestone stage with protected E2E files and no prepared work", () => {
+  const { repo, git } = authoringRepository();
+  try {
+    rmSync(join(repo, "__scenario__/stages/launch/issues"), {
+      recursive: true,
+      force: true,
+    });
+    rmSync(join(repo, "__scenario__/stages/launch/prs"), {
+      recursive: true,
+      force: true,
+    });
+    const stage = [
+      "---",
+      "title: Private inbox",
+      "mode: milestone",
+      "requiredCheck: Inbox E2E / browser",
+      "workflowPath: .github/workflows/inbox-e2e.yml",
+      "protectedFiles:",
+      "  - .github/workflows/inbox-e2e.yml",
+      "  - test/e2e/inbox.spec.ts",
+      "evaluation:",
+      '  issueBreakdown: "Reward independently reviewable issues; one broad issue receives low breakdown credit."',
+      '  issueClarity: "Reward clear scope and acceptance criteria."',
+      '  pullRequestQuality: "Judge correctness and maintainability against the milestone."',
+      '  reviewQuality: "Reward substantive feedback and discount cosmetic-only nitpicks."',
+      "endings:",
+      "  success: Ready",
+      "  incomplete: More work",
+      "  partial: Needs a check",
+      "---",
+      "Build the private inbox from the public acceptance criteria.",
+    ].join("\n");
+    writeFileSync(join(repo, "__scenario__/stages/launch/stage.md"), stage);
+    mkdirSync(join(repo, ".github/workflows"), { recursive: true });
+    mkdirSync(join(repo, "test/e2e"), { recursive: true });
+    writeFileSync(
+      join(repo, ".github/workflows/inbox-e2e.yml"),
+      "name: Inbox E2E\n",
+    );
+    writeFileSync(
+      join(repo, "test/e2e/inbox.spec.ts"),
+      "test('inbox', () => {});\n",
+    );
+    git("add", ".");
+    git("commit", "-m", "Add milestone E2E workflow");
+    const baseSha = git("rev-parse", "HEAD").toString().trim();
+    git("update-ref", "refs/remotes/origin/review/stage/launch/base", baseSha);
+
+    const pack = publishScenario(repo);
+    assert.equal(pack.stages[0].mode, "milestone");
+    assert.equal(pack.stages[0].requiredCheck, "Inbox E2E / browser");
+    assert.deepEqual(pack.stages[0].issues, []);
+    assert.deepEqual(pack.stages[0].proposals, []);
+    assert.deepEqual(pack.stages[0].protectedFiles, [
+      ".github/workflows/inbox-e2e.yml",
+      "test/e2e/inbox.spec.ts",
+    ]);
+    assert.equal(validatePackage(pack).stages[0].mode, "milestone");
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
   }
 });

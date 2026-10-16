@@ -18,7 +18,7 @@ Reviewed on 2026-10-15 against the current source tree. The earlier cleanup item
 
 - Reconciliation still refreshes scenario state from GitHub to recover missed events and verify authored changes. The implementation records GitHub request counts for diagnostics; no throughput or scale capacity is claimed here.
 - The launcher remains plain HTML, CSS, and JavaScript; adding a frontend framework is not necessary for the current interface.
-- Gameplay scoring is deterministic. The Cloudflare Worker can use its configured AI reviewer for concern matching and advisory coaching, but the Node webhook service defaults to unassessed review text. Missing or uncertain model output never decides score or blocks deterministic outcome handling.
+- Review-game outcomes stay deterministic. Milestone completion is determined by the required GitHub Actions E2E check; Clef scores issue planning, clarity, PR quality, and review quality as separate dimensions. Missing or uncertain Clef output leaves those quality dimensions unassessed and never blocks a passing milestone.
 - Scenario releases are immutable and version-pinned. Historical runs keep their original scenario identity, so published packages needed to resolve those runs must remain available.
 - The boundary schemas validate the fields the service consumes and discard unrelated GitHub payload fields. They are intentionally adapters for this product's required data, not a general GitHub API client model.
 
