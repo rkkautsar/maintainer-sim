@@ -1,4 +1,4 @@
-import { report } from "./diagnostics.ts";
+import { failureCode, report } from "./diagnostics.ts";
 import { assess } from "./engine.ts";
 import { postNotice, sendStoryTouches } from "./game/messages.ts";
 import { advanceStage } from "./game/progression.ts";
