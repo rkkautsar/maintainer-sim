@@ -113,7 +113,12 @@ export class Game {
         ["finished", "inaccessible", "seeding"].includes(r.phase)
       )
         continue;
-      const milestoneMode = scenarioFor(r).mode === "milestone";
+      const stageMode = scenarioFor(r).mode ?? "review";
+      if (r.mode !== stageMode) {
+        r.mode = stageMode;
+        this.store.save(r);
+      }
+      const milestoneMode = stageMode === "milestone";
       if (
         event === "issue_comment" &&
         (milestoneMode
@@ -137,10 +142,26 @@ export class Game {
           payload.comment?.user.id === r.player
             ? command(payload.comment.body)
             : undefined;
-        if (
-          cmd?.kind === "finish" ||
-          (await milestoneTestStatus(r, gh)) === "passed"
-        ) {
+        const testStatus =
+          cmd?.kind === "finish" ? undefined : await milestoneTestStatus(r, gh);
+        if (testStatus === "passed") {
+          try {
+            await this.notice(
+              r,
+              gh,
+              "milestone-passed",
+              "✅ The required E2E check passed. I’m finalizing the scorecard now and will post the result here.",
+            );
+          } catch (error) {
+            report({
+              component: "game",
+              event: "milestone_status_notice_failed",
+              reason: failureCode(error),
+              run: r.id,
+            });
+          }
+        }
+        if (cmd?.kind === "finish" || testStatus === "passed") {
           await this.finish(r, gh);
         }
         report({

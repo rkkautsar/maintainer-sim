@@ -48,6 +48,7 @@ export const runSchema: z.ZodType<Run> = z.object({
   repo: z.string(),
   player: positiveId,
   phase: z.enum(["seeding", "active", "finishing", "finished", "inaccessible"]),
+  mode: z.enum(["review", "milestone"]).optional(),
   scenario: z.object({
     id: z.string(),
     version: z.string(),

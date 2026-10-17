@@ -279,13 +279,17 @@ function milestoneDebrief(run: Run): string {
         : score?.testStatus === "pending"
           ? "Still running"
           : "No result found";
+  const unassessed =
+    result.maximum < 100
+      ? ` (${100 - result.maximum} points not assessed)`
+      : "";
   const lines = [
     "## 🏁 Stage debrief",
     "",
     storyEnding(result, run),
     "",
     `**Milestone tests:** ${testLabel}`,
-    `**Score:** ${result.points}/${result.maximum} assessed points`,
+    `**Score:** ${result.points}/${result.maximum} assessed points${unassessed}`,
     "",
     "| Dimension | Score |",
     "| :-- | --: |",

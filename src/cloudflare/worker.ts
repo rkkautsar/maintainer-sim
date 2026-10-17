@@ -464,24 +464,41 @@ export class GameSession extends DurableObject<Env> {
         }
       } else {
         for (const r of this.store.all())
-          if (["active", "finishing"].includes(r.phase))
+          if (["active", "finishing"].includes(r.phase)) {
+            const interval =
+              r.phase === "finishing"
+                ? 60000
+                : r.mode === "milestone"
+                  ? 120000
+                  : 600000;
             this.store.enqueue(
-              "reconcile:" + r.id + ":" + Math.floor(Date.now() / 600000),
+              "reconcile:" + r.id + ":" + Math.floor(Date.now() / interval),
               "push",
               JSON.stringify({
                 installation: { id: r.installation },
                 repository: { id: r.repository },
               }),
             );
+          }
       }
     } finally {
       const due = this.store.nextDeliveryTime();
       if (due !== undefined)
         await this.ctx.storage.setAlarm(Math.max(Date.now() + 100, due));
-      else if (
-        this.store.all().some((r) => ["active", "finishing"].includes(r.phase))
-      )
-        await this.ctx.storage.setAlarm(Date.now() + 600000);
+      else {
+        const runs = this.store
+          .all()
+          .filter((r) => ["active", "finishing"].includes(r.phase));
+        if (runs.length)
+          await this.ctx.storage.setAlarm(
+            Date.now() +
+              (runs.some((r) => r.phase === "finishing")
+                ? 60000
+                : runs.some((r) => r.mode === "milestone")
+                  ? 120000
+                  : 600000),
+          );
+      }
     }
   }
 }

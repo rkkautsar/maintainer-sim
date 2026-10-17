@@ -282,7 +282,9 @@ export class LaunchSession extends DurableObject<Env> {
         job.error =
           errorStatus(error) === 409 || errorStatus(error) === 422
             ? "That repository name is already taken or cannot be created. Existing repositories were left unchanged."
-            : "Setup could not finish. Check App permissions, then retry.";
+            : errorStatus(error) === 403
+              ? "GitHub denied a setup request. Confirm PR Flood is installed with access to this repository and approve any pending permission update, then resume setup."
+              : "Setup could not finish after several attempts. Your repository is preserved; confirm PR Flood can access it, then resume setup. If access is already correct, try again later.";
       }
       await this.ctx.storage.put("job", job);
       await this.ctx.storage.setAlarm(

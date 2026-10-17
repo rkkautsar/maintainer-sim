@@ -40,6 +40,7 @@ export type Run = {
   repo: string;
   player: number;
   phase: Phase;
+  mode?: "review" | "milestone";
   scenario: { id: string; version: string; stage: string; digest: string };
   previousRun?: string;
   reason?: string;

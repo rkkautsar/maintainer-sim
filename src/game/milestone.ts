@@ -293,6 +293,31 @@ export async function assessMilestone(
         : status === "pending"
           ? "The required behavioral E2E check is still running."
           : "No completed run of the required behavioral E2E check was found on the current default branch.";
+  const qualityLabels = {
+    issueBreakdown: "issue breakdown",
+    issueClarity: "issue clarity",
+    pullRequestQuality: "pull request quality",
+    reviewQuality: "review quality",
+  } as const;
+  const assessed = quality
+    ? (Object.keys(qualityLabels) as (keyof typeof qualityLabels)[]).filter(
+        (key) => quality[key] !== null,
+      )
+    : [];
+  const unassessed = (
+    Object.keys(qualityLabels) as (keyof typeof qualityLabels)[]
+  ).filter((key) => !assessed.includes(key));
+  const qualityReasoning =
+    assessed.length === 0
+      ? "Quality dimensions were not assessed by Clef."
+      : [
+          `Clef assessed ${assessed.map((key) => qualityLabels[key]).join(", ")}.`,
+          unassessed.length
+            ? `${unassessed.map((key) => qualityLabels[key]).join(", ")} ${unassessed.length === 1 ? "was" : "were"} not assessed.`
+            : undefined,
+        ]
+          .filter((part): part is string => !!part)
+          .join(" ");
   return {
     complete: status === "passed" ? ["milestone"] : [],
     total: 1,
@@ -310,9 +335,7 @@ export async function assessMilestone(
       },
     ],
     reasoning:
-      (quality
-        ? "Clef assessed issue planning, clarity, implementation, and review quality."
-        : "Quality dimensions were not assessed by Clef.") +
+      qualityReasoning +
       (clarificationRounds
         ? ` ${clarificationRounds} Louibot clarification round(s) on issues without a merged linked PR reduced issue clarity.`
         : ""),

@@ -23,14 +23,15 @@ export function publicLaunch(job: Job | undefined, slug = "pr-flood") {
       "The release brief is waiting in Game Master issue #1.",
     ],
     "waiting-access": [
-      "Connect the game master",
+      "Finish connecting PR Flood",
       job.repository
-        ? "Install or update PR Flood, select your new repository, then return and try again."
-        : "Install PR Flood on your personal GitHub account, then return and try again to create your repository.",
+        ? "PR Flood cannot access this repository yet. Install or update the app, select this repository, approve any requested permission changes, then return and check access again."
+        : "Install PR Flood on your personal GitHub account and approve the requested access. Return here and check access again to continue creating your repository.",
     ],
     failed: [
       "Setup needs another try",
-      job.error ?? "Your repository is preserved. Retry to continue setup.",
+      job.error ??
+        "Your repository is preserved. Confirm PR Flood can access it, then resume setup.",
     ],
   };
   return {

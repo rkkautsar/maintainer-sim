@@ -13,6 +13,8 @@ export async function seedRun(store: Persistence, r: Run, gh: GitHub) {
     "load_scenario",
     () => scenarioFor(r),
   );
+  r.mode = scenarioFor(r).mode ?? "review";
+  store.save(r);
   const root = runRoot(r);
   const repository = await atSeedStep("read_repository", () =>
     gh.repository(root),

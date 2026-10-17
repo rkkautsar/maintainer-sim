@@ -263,8 +263,14 @@ function renderJobLinks(box, job) {
   }
 }
 
-function renderRetry(box) {
-  const retry = el("button", "Try again", "secondary");
+function renderRetry(box, job) {
+  const retry = el(
+    "button",
+    job.state === "waiting-access"
+      ? "I’ve updated access — check again"
+      : "Resume setup",
+    "secondary",
+  );
   retry.onclick = async () => {
     retry.disabled = true;
     try {
@@ -282,7 +288,7 @@ function renderJob(box, job) {
   box.hidden = false;
   box.replaceChildren(el("h3", job.title), el("p", job.message));
   renderJobLinks(box, job);
-  if (["waiting-access", "failed"].includes(job.state)) renderRetry(box);
+  if (["waiting-access", "failed"].includes(job.state)) renderRetry(box, job);
   if (!["ready", "failed", "waiting-access"].includes(job.state)) {
     poll = setTimeout(watch, 3000);
   }
