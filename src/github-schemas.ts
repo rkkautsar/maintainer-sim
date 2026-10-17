@@ -97,6 +97,7 @@ export const checkRunsSchema = z.object({
 export const workflowRunsSchema = z.object({
   workflow_runs: z.array(
     z.object({
+      name: z.string().optional(),
       path: z.string(),
       head_sha: z.string(),
       status: z.string(),

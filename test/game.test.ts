@@ -47,8 +47,8 @@ class Fake extends GitHub {
     throw new Error("Unexpected GET " + path);
   }
   async list(path: string) {
-    if (/\/milestones\/\d+\/issues/.test(path)) {
-      const number = Number(path.match(/\/milestones\/(\d+)\//)?.[1]);
+    if (/\/issues\?milestone=\d+&state=all/.test(path)) {
+      const number = Number(path.match(/\?milestone=(\d+)/)?.[1]);
       return this.issues.filter((issue) => issue.milestone === number);
     }
     if (/\/pulls\/\d+\/files/.test(path)) return this.pullFiles;
@@ -318,7 +318,7 @@ test("milestone stage seeds no authored work and gives full outcome credit on it
     ];
     fake.checkRunItems = [
       {
-        name: "Inbox E2E / browser",
+        name: "browser",
         head_sha: "baseline",
         status: "completed",
         conclusion: "success",
@@ -328,6 +328,7 @@ test("milestone stage seeds no authored work and gives full outcome credit on it
     ];
     fake.workflowRunItems = [
       {
+        name: "Inbox E2E",
         path: ".github/workflows/inbox-e2e.yml",
         head_sha: "baseline",
         status: "completed",
@@ -363,7 +364,7 @@ test("changing a protected E2E file keeps a passing Actions check from completin
     fake.files.baseline["test/e2e/inbox.spec.ts"] = "test.skip('bypass');";
     fake.checkRunItems = [
       {
-        name: "Inbox E2E / browser",
+        name: "browser",
         head_sha: "baseline",
         status: "completed",
         conclusion: "success",
@@ -373,6 +374,7 @@ test("changing a protected E2E file keeps a passing Actions check from completin
     ];
     fake.workflowRunItems = [
       {
+        name: "Inbox E2E",
         path: ".github/workflows/inbox-e2e.yml",
         head_sha: "baseline",
         status: "completed",
@@ -391,7 +393,7 @@ test("a same-named check from a different workflow cannot complete the milestone
   try {
     fake.checkRunItems = [
       {
-        name: "Inbox E2E / browser",
+        name: "browser",
         head_sha: "baseline",
         status: "completed",
         conclusion: "success",
@@ -401,6 +403,7 @@ test("a same-named check from a different workflow cannot complete the milestone
     ];
     fake.workflowRunItems = [
       {
+        name: "Fake workflow",
         path: ".github/workflows/fake.yml",
         head_sha: "baseline",
         status: "completed",

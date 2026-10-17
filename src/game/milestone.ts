@@ -31,7 +31,9 @@ export async function milestoneTestStatus(
   if (workflow.conclusion !== "success") return "failed";
   const check = (await gh.checkRuns(root, sha)).find(
     (item) =>
-      item.name === stage.requiredCheck &&
+      (item.name === stage.requiredCheck ||
+        (workflow.name &&
+          stage.requiredCheck === `${workflow.name} / ${item.name}`)) &&
       item.head_sha === sha &&
       item.app?.slug === "github-actions" &&
       item.check_suite?.id === workflow.check_suite_id,

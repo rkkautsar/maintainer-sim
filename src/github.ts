@@ -84,7 +84,7 @@ export class GitHub {
   }
   async listMilestoneItems(root: string, milestone: number) {
     return (
-      await this.list(root + "/milestones/" + milestone + "/issues?state=all")
+      await this.list(root + "/issues?milestone=" + milestone + "&state=all")
     ).map((x) => parse(schemas.milestoneItemSchema, x));
   }
   async listMilestones(root: string) {
